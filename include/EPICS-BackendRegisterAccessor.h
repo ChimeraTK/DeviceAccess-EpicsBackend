@@ -1,0 +1,155 @@
+/*
+ * EPICS-BackendRegisterAccessor.h
+ *
+ *  Created on: Jan 22, 2021
+ *      Author: Klaus Zenker (HZDR)
+ */
+
+#ifndef INCLUDE_EPICS_BACKENDREGISTERACCESSOR_H_
+#define INCLUDE_EPICS_BACKENDREGISTERACCESSOR_H_
+
+#include <ChimeraTK/NDRegisterAccessor.h>
+#include <ChimeraTK/RegisterPath.h>
+#include <ChimeraTK/AccessMode.h>
+
+#include "EPICS_types.h"
+#include <cadef.h>
+
+
+
+
+namespace ChimeraTK{
+
+  template <typename DestType, typename SourceType>
+  class EpicsRangeCheckingDataConverter{
+    /** define round type for the boost::numeric::converter */
+    template<class S>
+    struct Round {
+      static S nearbyint(S s) { return round(s); }
+
+      typedef boost::mpl::integral_c<std::float_round_style, std::round_to_nearest> round_style;
+    };
+    typedef boost::numeric::converter<DestType, SourceType, boost::numeric::conversion_traits<DestType, SourceType>,
+        boost::numeric::def_overflow_handler, Round<SourceType>>
+        converter;
+  public:
+    DestType convert(SourceType& x){
+      try{
+        return converter::convert(x);
+      } catch (boost::numeric::positive_overflow&) {
+        return std::numeric_limits<DestType>::max();
+      } catch (boost::numeric::negative_overflow&) {
+        return std::numeric_limits<DestType>::min();
+      }
+    }
+  };
+
+  struct EpicsBackendRegisterAccessorBase{
+    EpicsBackendRegisterAccessorBase(boost::shared_ptr<EpicsBackend> backend, EpicsBackendRegisterInfo* info): _backend(backend), _info(info){}
+
+    EpicsBackendRegisterInfo* _info;
+    cppext::future_queue<void*> _notifications;
+    boost::shared_ptr<EpicsBackend> _backend;
+    size_t _numberOfWords; ///< Requested array length. Could be smaller than what is available on the server.
+    size_t _offsetWords; ///< Requested offset for arrays.
+    ChimeraTK::VersionNumber _currentVersion;
+    pv _pv;
+  };
+
+  template<typename EpicsType, typename CTKType>
+  class EpicsBackendRegisterAccessor : public EpicsBackendRegisterAccessorBase, public NDRegisterAccessor<CTKType> {
+  public:
+    ~EpicsBackendRegisterAccessor();
+
+    void doReadTransferSynchronously() override;
+
+    void doPreRead(TransferType) override{
+      if(!_backend->isOpen())
+        throw ChimeraTK::logic_error("Read operation not allowed while device is closed.");
+    }
+
+    void doPreWrite(TransferType, VersionNumber) override{
+      if(!_backend->isOpen())
+        throw ChimeraTK::logic_error("Write operation not allowed while device is closed.");
+    }
+
+    bool doWriteTransfer(VersionNumber /*versionNumber*/={}) override {return true;};
+
+    void doPostRead(TransferType, bool /*hasNewData*/) override;
+
+    bool isReadOnly() const override {
+     return _info->_isReadonly;
+    }
+
+    bool isReadable() const override {
+     return true;
+    }
+
+    bool isWriteable() const override {
+     return !_info->_isReadonly;
+    }
+
+    void interrupt() override { this->interrupt_impl(this->_notifications);}
+
+    using TransferElement::_readQueue;
+
+    std::vector< boost::shared_ptr<TransferElement> > getHardwareAccessingElements() override {
+     return { boost::enable_shared_from_this<TransferElement>::shared_from_this() };
+    }
+
+    std::list<boost::shared_ptr<TransferElement> > getInternalElements() override {
+     return {};
+    }
+
+    void replaceTransferElement(boost::shared_ptr<TransferElement> /*newElement*/) override {} // LCOV_EXCL_LINE
+
+    friend class EpicsBackend;
+
+    EpicsRangeCheckingDataConverter<CTKType, EpicsType> toCTK;
+  private:
+    EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, const std::string &node_id, EpicsBackendRegisterInfo* registerInfo,
+        AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister):
+        EpicsBackendRegisterAccessorBase(backend, registerInfo){
+
+    }
+
+
+  };
+
+  template<typename EpicsType, typename CTKType>
+  void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doReadTransferSynchronously(){
+    if(ca_state(_pv.chid) == cs_conn){
+      _pv.value = calloc(1, dbr_size_n(_pv.dbrType, _pv.nElems));
+      auto result = ca_array_get(_pv.dbrType, _pv.nElems, _pv.chid, _pv.value);
+      if(result != ECA_NORMAL){
+        throw ChimeraTK::runtime_error(std::string("Failed to to read pv: ") + _pv.name);
+      }
+      result = ca_pend_io(_backend->_caTimeout);
+      if(result != ECA_TIMEOUT){
+        throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + _pv.name);
+      }
+
+
+    } else {
+      std::cerr << "Disconnected when filling catalogue entry for " << _pv.name << std::endl;
+      return;
+    }
+
+  }
+  template<typename EpicsType, typename CTKType>
+  void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doPostRead(TransferType, bool /*hasNewData*/){
+    EpicsType* tmp = (EpicsType*)dbr_value_ptr(_pv.value, _pv.dbfType);
+    for(size_t i = 0; i < _numberOfWords; i++){
+      EpicsType value = tmp[_offsetWords+i];
+      // Fill the NDRegisterAccessor buffer
+      this->accessData(i) = toCTK.convert(value);
+    }
+    _currentVersion = ChimeraTK::VersionNumber();
+    TransferElement::_versionNumber = _currentVersion;
+  }
+
+}
+
+
+
+#endif /* INCLUDE_EPICS_BACKENDREGISTERACCESSOR_H_ */
