@@ -14,17 +14,18 @@
 #include "EPICS_types.h"
 
 #include <string.h>
+#include <memory>
 
 namespace ChimeraTK {
 struct EpicsBackendRegisterInfo : public RegisterInfo {
 
-  EpicsBackendRegisterInfo(const std::string name):_name(name){};
+  EpicsBackendRegisterInfo(const RegisterPath &path):_name(path){};
 
   virtual ~EpicsBackendRegisterInfo() {}
 
-  RegisterPath getRegisterName() const override { return RegisterPath(_name); }
+  RegisterPath getRegisterName() const override { return _name; }
 
-  std::string getRegisterPath() const { return _path; }
+  std::string getRegisterPath() const { return _name; }
 
   unsigned int getNumberOfElements() const override { return _arrayLength; }
 
@@ -40,8 +41,7 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
   AccessModeFlags getSupportedAccessModes() const override {return _accessModes;}
 
-  RegisterPath _path;
-  std::string _name;
+  RegisterPath _name;
   bool _isReadonly;
   size_t _arrayLength;
   RegisterInfo::DataDescriptor _dataDescriptor;
@@ -61,8 +61,6 @@ public:
 protected:
   EpicsBackend(const std::string &mapfile = "");
 
-  void addCatalogueEntry(const std::string &pvName);
-
   pv createPV(const std::string &pvName);
 
   /**
@@ -76,6 +74,12 @@ protected:
 
   void close() override {};
 
+  std::string readDeviceInfo() override {
+    std::stringstream ss;
+    ss << "EPICS Server";
+    return ss.str();
+  }
+
   bool isFunctional() const override {return _isFunctional;};
 
   void activateAsyncRead() noexcept override {};
@@ -83,7 +87,7 @@ protected:
   template<typename UserType>
   boost::shared_ptr< NDRegisterAccessor<UserType> > getRegisterAccessor_impl(const RegisterPath &registerPathName, size_t numberOfWords, size_t wordOffsetInRegister, AccessModeFlags flags);
 
-  DEFINE_VIRTUAL_FUNCTION_TEMPLATE_VTABLE_FILLER( EpicsBackend, getRegisterAccessor_impl, 1);
+  DEFINE_VIRTUAL_FUNCTION_TEMPLATE_VTABLE_FILLER( EpicsBackend, getRegisterAccessor_impl, 4);
 
 
   /** We need to make the catalogue mutable, since we fill it within getRegisterCatalogue() */
@@ -114,6 +118,11 @@ private:
   bool _asyncReadActivated{false};
 
   double _caTimeout{1.0};
+
+  void fillCatalogueFromMapFile(const std::string &mapfile);
+
+  void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
+
 };
 
 }

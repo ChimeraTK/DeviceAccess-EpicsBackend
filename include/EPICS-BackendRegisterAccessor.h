@@ -13,6 +13,7 @@
 #include <ChimeraTK/AccessMode.h>
 
 #include "EPICS_types.h"
+#include "EPICS-Backend.h"
 #include <cadef.h>
 
 
@@ -44,8 +45,27 @@ namespace ChimeraTK{
     }
   };
 
-  struct EpicsBackendRegisterAccessorBase{
-    EpicsBackendRegisterAccessorBase(boost::shared_ptr<EpicsBackend> backend, EpicsBackendRegisterInfo* info): _backend(backend), _info(info){}
+  template <typename SourceType>
+  class EpicsRangeCheckingDataConverter<std::string,SourceType>{
+  public:
+    std::string convert(SourceType& x){
+      return std::to_string(x);
+    }
+  };
+
+  template <typename DestType>
+  class EpicsRangeCheckingDataConverter<DestType, std::string>{
+  public:
+    DestType convert(std::string&){
+      throw std::logic_error("Conversion from string is not allowed.");
+
+    }
+  };
+
+  class EpicsBackendRegisterAccessorBase{
+  public:
+    EpicsBackendRegisterAccessorBase(boost::shared_ptr<EpicsBackend> backend, EpicsBackendRegisterInfo* info, size_t numberOfWords, size_t wordOffsetInRegister):
+      _info(info), _backend(backend), _numberOfWords(numberOfWords), _offsetWords(wordOffsetInRegister){}
 
     EpicsBackendRegisterInfo* _info;
     cppext::future_queue<void*> _notifications;
@@ -106,15 +126,18 @@ namespace ChimeraTK{
     friend class EpicsBackend;
 
     EpicsRangeCheckingDataConverter<CTKType, EpicsType> toCTK;
-  private:
+
     EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, const std::string &node_id, EpicsBackendRegisterInfo* registerInfo,
-        AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister):
-        EpicsBackendRegisterAccessorBase(backend, registerInfo){
-
-    }
-
-
+        AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister);
   };
+
+  template<typename EpicsType, typename CTKType>
+  EpicsBackendRegisterAccessor<EpicsType, CTKType>::EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, const std::string &node_id, EpicsBackendRegisterInfo* registerInfo,
+          AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister):
+          EpicsBackendRegisterAccessorBase(boost::dynamic_pointer_cast<EpicsBackend>(backend), registerInfo, numberOfWords, wordOffsetInRegister),
+          NDRegisterAccessor<CTKType>(path, flags){
+    NDRegisterAccessor<CTKType>::buffer_2D.resize(1);
+  }
 
   template<typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doReadTransferSynchronously(){

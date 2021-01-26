@@ -24,7 +24,7 @@ typedef enum { dec, bin, oct, hex } IntFormatT;
 typedef struct
 {
     char* name;
-    chid  chid;
+    chanId  chid;
     long  dbfType;
     long  dbrType;
     unsigned long nElems;       // True length of data in value

@@ -6,6 +6,7 @@
  */
 
 #include <iostream>
+#include <fstream>
 
 #include "EPICS-Backend.h"
 #include "EPICS-BackendRegisterAccessor.h"
@@ -36,7 +37,7 @@ namespace ChimeraTK{
 
   EpicsBackend::EpicsBackend(const std::string &mapfile): _catalogue_filled(false){
     FILL_VIRTUAL_FUNCTION_TEMPLATE_VTABLE(getRegisterAccessor_impl);
-
+    fillCatalogueFromMapFile(mapfile);
     auto result = ca_context_create(ca_disable_preemptive_callback);
     if (result != ECA_NORMAL) {
       std::stringstream ss;
@@ -77,32 +78,32 @@ namespace ChimeraTK{
     if(info->_dpfType == DBR_STSACK_STRING || info->_dpfType == DBR_CLASS_NAME)
       base_type = DBR_STRING;
     switch(info->_dpfType){
-      case DBR_STRING:
-        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        break;
+//      case DBR_STRING:
+//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        break;
       case DBR_FLOAT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
         break;
       case DBR_DOUBLE:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_double_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
         break;
-      case DBR_CHAR:
-        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_char_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        break;
+//      case DBR_CHAR:
+//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_char_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        break;
       case DBR_INT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_int_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
         break;
       case DBR_LONG:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
         break;
-      case DBR_ENUM:
-        if(dbr_type_is_CTRL(info->_dpfType))
-          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        else if (dbr_type_is_GR(info->_dpfType))
-          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        else
-          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        break;
+//      case DBR_ENUM:
+//        if(dbr_type_is_CTRL(info->_dpfType))
+//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        else if (dbr_type_is_GR(info->_dpfType))
+//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        else
+//          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        break;
       default:
         throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info->_dpfType) + " not implemented.");
         break;
@@ -126,8 +127,8 @@ namespace ChimeraTK{
     return pv;
   }
 
-  void EpicsBackend::addCatalogueEntry(const std::string &pvName){
-    pv pv = createPV(pvName);
+  void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName){
+    pv pv = createPV(*(pvName.get()));
     if(pv.status != ECA_NORMAL)
       return;
     auto result = ca_pend_io(_caTimeout);
@@ -136,7 +137,7 @@ namespace ChimeraTK{
       return;
     }
 
-    EpicsBackendRegisterInfo info(pvName);
+    EpicsBackendRegisterInfo info(path);
     info._isReadonly = false;
     // try reading
     result = ca_array_get(pv.dbrType, pv.nElems, pv.chid, pv.value);
@@ -149,7 +150,41 @@ namespace ChimeraTK{
     info._arrayLength = ca_element_count(pv.chid);
     info._dpfType = ca_field_type(pv.chid);
     info._id = pv.chid;
+    _catalogue_mutable.addRegister(info);
 
     ca_context_destroy();
+  }
+
+  void EpicsBackend::fillCatalogueFromMapFile(const std::string &mapfileName){
+    boost::char_separator<char> sep{"\t ", "", boost::drop_empty_tokens};
+    std::string line;
+    std::ifstream mapfile (mapfileName);
+    if (mapfile.is_open()) {
+      while (std::getline(mapfile,line)) {
+        if(line.empty())
+          continue;
+        tokenizer tok{line, sep};
+        size_t nTokens = std::distance(tok.begin(), tok.end());
+        if (!(nTokens == 2)){
+          std::cerr << "Wrong number of tokens (" << nTokens << ") in mapfile " << mapfileName << " line (-> line is ignored): \n "  << line << std::endl;
+          continue;
+        }
+        auto it = tok.begin();
+
+        try{
+          std::shared_ptr<std::string> pathStr = std::make_shared<std::string>(*it);
+          RegisterPath path(*(pathStr.get()));
+          it++;
+          std::shared_ptr<std::string> nodeName = std::make_shared<std::string>(*it);
+          addCatalogueEntry(path, nodeName);
+        } catch (std::out_of_range &e){
+          std::cerr << "Failed reading the following line from mapping file " << mapfileName
+              << "\n " << line << std::endl;
+        }
+      }
+      mapfile.close();
+    } else {
+      ChimeraTK::runtime_error(std::string("Failed reading mapfile: ") + mapfileName);
+    }
   }
 }
