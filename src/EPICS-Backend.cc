@@ -137,19 +137,19 @@ namespace ChimeraTK{
       return;
     }
 
-    EpicsBackendRegisterInfo info(path);
-    info._isReadonly = false;
+    boost::shared_ptr<EpicsBackendRegisterInfo> info = boost::make_shared<EpicsBackendRegisterInfo>(path);
+    info->_isReadonly = false;
     // try reading
     result = ca_array_get(pv.dbrType, pv.nElems, pv.chid, pv.value);
     if(result == ECA_NORDACCESS){
       std::cerr << "No read access to PV: " << pv.name << " -> will not be added to the catalogue." << std::endl;
     } else if (result == ECA_NOWTACCESS){
-      info._isReadonly = true;
+      info->_isReadonly = true;
     }
 
-    info._arrayLength = ca_element_count(pv.chid);
-    info._dpfType = ca_field_type(pv.chid);
-    info._id = pv.chid;
+    info->_arrayLength = ca_element_count(pv.chid);
+    info->_dpfType = ca_field_type(pv.chid);
+    info->_id = pv.chid;
     _catalogue_mutable.addRegister(info);
 
     ca_context_destroy();
