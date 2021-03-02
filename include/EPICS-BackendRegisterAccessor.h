@@ -12,6 +12,8 @@
 #include <ChimeraTK/RegisterPath.h>
 #include <ChimeraTK/AccessMode.h>
 
+#include <boost/enable_shared_from_this.hpp>
+
 #include "EPICS_types.h"
 #include "EPICS-Backend.h"
 #include <cadef.h>

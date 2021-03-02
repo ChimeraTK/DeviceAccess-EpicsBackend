@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <vector>
 
 #include "EPICS-Backend.h"
 #include "EPICS-BackendRegisterAccessor.h"
@@ -45,14 +46,10 @@ namespace ChimeraTK{
       throw ChimeraTK::runtime_error(ss.str());
     }
   }
-  EpicsBackend::BackendRegisterer::BackendRegisterer() {
-    BackendFactory::getInstance().registerBackendType("epics", &EpicsBackend::createInstance, {"map"});
-    std::cout << "BackendRegisterer: registered backend type epics" << std::endl;
-  }
 
   template<typename UserType>
   boost::shared_ptr< NDRegisterAccessor<UserType> > EpicsBackend::getRegisterAccessor_impl(const RegisterPath &registerPathName, size_t numberOfWords, size_t wordOffsetInRegister, AccessModeFlags flags) {
-    std::string path = "EPICS://";
+    std::string path = "EPICS://" + registerPathName;
     EpicsBackendRegisterInfo* info = nullptr;
     for(auto it = _catalogue_mutable.begin(), ite = _catalogue_mutable.end(); it != ite; it++){
       if(it->getRegisterName() == registerPathName){
@@ -84,18 +81,18 @@ namespace ChimeraTK{
       case DBR_FLOAT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
         break;
-      case DBR_DOUBLE:
-        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_double_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        break;
+//      case DBR_DOUBLE:
+//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_double_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        break;
 //      case DBR_CHAR:
 //        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_char_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
 //        break;
-      case DBR_INT:
-        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_int_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        break;
-      case DBR_LONG:
-        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-        break;
+//      case DBR_INT:
+//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_int_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        break;
+//      case DBR_LONG:
+//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        break;
 //      case DBR_ENUM:
 //        if(dbr_type_is_CTRL(info->_dpfType))
 //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
@@ -111,7 +108,15 @@ namespace ChimeraTK{
 
   }
 
-  boost::shared_ptr<DeviceBackend> EpicsBackend::createInstance(std::string address, std::map<std::string,std::string> parameters) {
+  EpicsBackend::BackendRegisterer::BackendRegisterer() {
+    BackendFactory::getInstance().registerBackendType("epics", &EpicsBackend::createInstance, {"map"});
+    std::cout << "BackendRegisterer: registered backend type epics" << std::endl;
+  }
+
+  boost::shared_ptr<DeviceBackend> EpicsBackend::createInstance(std::string /*address*/, std::map<std::string,std::string> parameters) {
+    if(parameters["map"].empty()) {
+      throw ChimeraTK::logic_error("No map file provided.");
+    }
     return boost::shared_ptr<DeviceBackend> (new EpicsBackend(parameters["map"]));
   }
 

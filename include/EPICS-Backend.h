@@ -9,7 +9,6 @@
 #define INCLUDE_EPICS_BACKEND_H_
 
 #include <ChimeraTK/DeviceBackendImpl.h>
-#include <boost/enable_shared_from_this.hpp>
 
 #include "EPICS_types.h"
 
