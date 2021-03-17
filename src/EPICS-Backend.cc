@@ -18,8 +18,6 @@
 #include <boost/tokenizer.hpp>
 typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
-#include <cadef.h>
-
 extern "C"{
     boost::shared_ptr<ChimeraTK::DeviceBackend> ChimeraTK_DeviceAccess_createBackend(
         std::string address, std::map<std::string, std::string> parameters) {
@@ -39,6 +37,8 @@ namespace ChimeraTK{
   EpicsBackend::EpicsBackend(const std::string &mapfile): _catalogue_filled(false){
     FILL_VIRTUAL_FUNCTION_TEMPLATE_VTABLE(getRegisterAccessor_impl);
     fillCatalogueFromMapFile(mapfile);
+    _catalogue_filled = true;
+    _isFunctional = true;
     auto result = ca_context_create(ca_disable_preemptive_callback);
     if (result != ECA_NORMAL) {
       std::stringstream ss;
@@ -48,8 +48,9 @@ namespace ChimeraTK{
   }
 
   template<typename UserType>
-  boost::shared_ptr< NDRegisterAccessor<UserType> > EpicsBackend::getRegisterAccessor_impl(const RegisterPath &registerPathName, size_t numberOfWords, size_t wordOffsetInRegister, AccessModeFlags flags) {
-    std::string path = "EPICS://" + registerPathName;
+  boost::shared_ptr< NDRegisterAccessor<UserType> > EpicsBackend::getRegisterAccessor_impl(
+      const RegisterPath &registerPathName, size_t numberOfWords, size_t wordOffsetInRegister, AccessModeFlags flags) {
+    RegisterPath path = "EPICS://" + registerPathName;
     EpicsBackendRegisterInfo* info = nullptr;
     for(auto it = _catalogue_mutable.begin(), ite = _catalogue_mutable.end(); it != ite; it++){
       if(it->getRegisterName() == registerPathName){
@@ -61,48 +62,50 @@ namespace ChimeraTK{
       throw ChimeraTK::logic_error(std::string("Requested register (") + registerPathName + ") was not found in the catalog.");
     }
 
-    if(numberOfWords + wordOffsetInRegister > info->_arrayLength ||
+    if(numberOfWords + wordOffsetInRegister > info->_pv.nElems ||
        (numberOfWords == 0 && wordOffsetInRegister > 0)){
       std::stringstream ss;
-      ss << "Requested number of words/elements ( " << numberOfWords << ") with offset " + wordOffsetInRegister << " exceeds the number of available words/elements: " << info->_arrayLength;
+      ss << "Requested number of words/elements ( " << numberOfWords << ") with offset " + wordOffsetInRegister << " exceeds the number of available words/elements: " << info->_pv.nElems;
       throw ChimeraTK::logic_error(ss.str());
     }
 
     if(numberOfWords == 0)
-      numberOfWords = info->_arrayLength;
+      numberOfWords = info->_pv.nElems;
 
-    unsigned base_type = info->_dpfType % (LAST_TYPE+1);
-    if(info->_dpfType == DBR_STSACK_STRING || info->_dpfType == DBR_CLASS_NAME)
+    unsigned base_type = info->_pv.dbfType % (LAST_TYPE+1);
+    if(info->_pv.dbfType == DBR_STSACK_STRING || info->_pv.dbfType == DBR_CLASS_NAME)
       base_type = DBR_STRING;
-    switch(info->_dpfType){
+    info->_pv.name = (char*)info->_caName.c_str();
+//    switch(info->_dpfType){
+    switch (base_type){
 //      case DBR_STRING:
-//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
 //        break;
       case DBR_FLOAT:
-        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
         break;
-//      case DBR_DOUBLE:
-//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_double_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-//        break;
-//      case DBR_CHAR:
-//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_char_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-//        break;
-//      case DBR_INT:
-//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_int_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-//        break;
-//      case DBR_LONG:
-//        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
-//        break;
+      case DBR_DOUBLE:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_double_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        break;
+      case DBR_CHAR:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_char_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        break;
+      case DBR_INT:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_int_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        break;
+      case DBR_LONG:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        break;
 //      case DBR_ENUM:
 //        if(dbr_type_is_CTRL(info->_dpfType))
-//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
 //        else if (dbr_type_is_GR(info->_dpfType))
-//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
 //        else
-//          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), registerPathName, info, flags, numberOfWords, wordOffsetInRegister);
+//          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
 //        break;
       default:
-        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info->_dpfType) + " not implemented.");
+        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info->_pv.dbfType) + " not implemented.");
         break;
     }
 
@@ -133,31 +136,33 @@ namespace ChimeraTK{
   }
 
   void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName){
-    pv pv = createPV(*(pvName.get()));
-    if(pv.status != ECA_NORMAL)
+    boost::shared_ptr<EpicsBackendRegisterInfo> info = boost::make_shared<EpicsBackendRegisterInfo>(path);
+    info->_pv = createPV(*(pvName.get()));
+    if(info->_pv.status != ECA_NORMAL)
       return;
     auto result = ca_pend_io(_caTimeout);
     if(result == ECA_TIMEOUT){
       std::cerr << "Channel time out for PV: " << pvName << std::endl;
       return;
     }
-
-    boost::shared_ptr<EpicsBackendRegisterInfo> info = boost::make_shared<EpicsBackendRegisterInfo>(path);
+    info->_caName = std::string(*pvName.get());
     info->_isReadonly = false;
+
+    info->_pv.nElems = ca_element_count(info->_pv.chid);
+    info->_pv.dbfType = ca_field_type(info->_pv.chid);
+    info->_pv.dbrType = dbf_type_to_DBR_TIME(info->_pv.dbfType);
+
     // try reading
-    result = ca_array_get(pv.dbrType, pv.nElems, pv.chid, pv.value);
+    result = ca_array_get(info->_pv.dbrType, info->_pv.nElems, info->_pv.chid, info->_pv.value);
     if(result == ECA_NORDACCESS){
-      std::cerr << "No read access to PV: " << pv.name << " -> will not be added to the catalogue." << std::endl;
+      std::cerr << "No read access to PV: " << info->_pv.name << " -> will not be added to the catalogue." << std::endl;
     } else if (result == ECA_NOWTACCESS){
       info->_isReadonly = true;
     }
 
-    info->_arrayLength = ca_element_count(pv.chid);
-    info->_dpfType = ca_field_type(pv.chid);
-    info->_id = pv.chid;
+    info->_dataDescriptor = RegisterInfo::DataDescriptor( ChimeraTK::RegisterInfo::FundamentalType::numeric,
+                        true, false, 320, 300 );
     _catalogue_mutable.addRegister(info);
-
-    ca_context_destroy();
   }
 
   void EpicsBackend::fillCatalogueFromMapFile(const std::string &mapfileName){

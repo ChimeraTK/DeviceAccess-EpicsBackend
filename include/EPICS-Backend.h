@@ -11,9 +11,12 @@
 #include <ChimeraTK/DeviceBackendImpl.h>
 
 #include "EPICS_types.h"
+#include <cadef.h>
 
 #include <string.h>
 #include <memory>
+
+
 
 namespace ChimeraTK {
 struct EpicsBackendRegisterInfo : public RegisterInfo {
@@ -26,11 +29,11 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
   std::string getRegisterPath() const { return _name; }
 
-  unsigned int getNumberOfElements() const override { return _arrayLength; }
+  unsigned int getNumberOfElements() const override { return _pv.nElems; }
 
   unsigned int getNumberOfChannels() const override { return 1; }
 
-  unsigned int getNumberOfDimensions() const override { return _arrayLength > 1 ? 1 : 0; }
+  unsigned int getNumberOfDimensions() const override { return _pv.nElems > 1 ? 1 : 0; }
 
   const RegisterInfo::DataDescriptor& getDataDescriptor() const override { return _dataDescriptor; }
 
@@ -42,12 +45,13 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
   RegisterPath _name;
   bool _isReadonly;
-  size_t _arrayLength;
   RegisterInfo::DataDescriptor _dataDescriptor;
   AccessModeFlags _accessModes{};
 
-  long _dpfType; // Data type
-  chid _id; // Channel id
+  //\ToDo: Use pointer to have name persistent
+  pv _pv;
+  // this is needed because the name inside _pv is just a pointer
+  std::string _caName;
 
 
 
@@ -55,12 +59,12 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
 class EpicsBackend : public DeviceBackendImpl{
 public:
+  ~EpicsBackend(){ca_context_destroy();}
   static boost::shared_ptr<DeviceBackend> createInstance(std::string address, std::map<std::string,std::string> parameters);
+  static pv createPV(const std::string &pvName);
 
 protected:
   EpicsBackend(const std::string &mapfile = "");
-
-  pv createPV(const std::string &pvName);
 
   /**
    * Return the catalogue and if not filled yet fill it.
@@ -69,7 +73,10 @@ protected:
 
   void setException() override {};
 
-  void open() override {};
+  void open() override {
+    _opened = true;
+   _isFunctional = true;
+  };
 
   void close() override {};
 

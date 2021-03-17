@@ -9,7 +9,6 @@ include(cmake/set_version_numbers.cmake)
 
 include(cmake/add_dependency.cmake)
 include(cmake/set_default_flags.cmake)
-include(cmake/enable_latest_cxx_support.cmake)
 
 add_dependency(ChimeraTK-DeviceAccess 02.00 REQUIRED)
 
@@ -23,8 +22,15 @@ aux_source_directory(${CMAKE_SOURCE_DIR}/src library_sources)
 add_library(${PROJECT_NAME} SHARED ${library_sources} )
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_LIBRARY_VERSION} SOVERSION ${${PROJECT_NAME}_SOVERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_FLAGS "-Wl,--enable-new-dtags")
-set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${ChimeraTK-DeviceAccess_CXX_FLAGS}")
-target_link_libraries(${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES} ${ChimeraTK-ControlSystemAdapter_LIBRARIES}) 
+set_target_properties( ${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+# set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-ftemplate-backtrace-limit=0 ${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
+#set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-ftemplate-backtrace-limit=30 ${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
+set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
+target_link_libraries(${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES} ${ChimeraTK-ControlSystemAdapter_LIBRARIES} ${EPICS_LIBRARIES}) 
+
+
+add_executable(testRead test/read.C)
+target_link_libraries(testRead ${EPICS_LIBRARIES})
 
 #Install the library and the executables
 install(TARGETS ${PROJECT_NAME}
