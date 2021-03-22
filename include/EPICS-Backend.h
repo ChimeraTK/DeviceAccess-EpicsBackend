@@ -29,11 +29,11 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
   std::string getRegisterPath() const { return _name; }
 
-  unsigned int getNumberOfElements() const override { return _pv.nElems; }
+  unsigned int getNumberOfElements() const override { return _pv->nElems; }
 
   unsigned int getNumberOfChannels() const override { return 1; }
 
-  unsigned int getNumberOfDimensions() const override { return _pv.nElems > 1 ? 1 : 0; }
+  unsigned int getNumberOfDimensions() const override { return _pv->nElems > 1 ? 1 : 0; }
 
   const RegisterInfo::DataDescriptor& getDataDescriptor() const override { return _dataDescriptor; }
 
@@ -49,7 +49,7 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
   AccessModeFlags _accessModes{};
 
   //\ToDo: Use pointer to have name persistent
-  pv _pv;
+  std::shared_ptr<pv> _pv;
   // this is needed because the name inside _pv is just a pointer
   std::string _caName;
 
@@ -61,7 +61,6 @@ class EpicsBackend : public DeviceBackendImpl{
 public:
   ~EpicsBackend(){ca_context_destroy();}
   static boost::shared_ptr<DeviceBackend> createInstance(std::string address, std::map<std::string,std::string> parameters);
-  static pv createPV(const std::string &pvName);
 
 protected:
   EpicsBackend(const std::string &mapfile = "");

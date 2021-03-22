@@ -142,20 +142,20 @@ namespace ChimeraTK{
 
   template<typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doReadTransferSynchronously(){
-    if(ca_state(_info->_pv.chid) == cs_conn){
-      _info->_pv.value = calloc(1, dbr_size_n(_info->_pv.dbrType, _info->_pv.nElems));
-      auto result = ca_array_get(_info->_pv.dbrType, _info->_pv.nElems, _info->_pv.chid, _info->_pv.value);
+    if(ca_state(_info->_pv->chid) == cs_conn){
+      _info->_pv->value = calloc(1, dbr_size_n(_info->_pv->dbrType, _info->_pv->nElems));
+      auto result = ca_array_get(_info->_pv->dbrType, _info->_pv->nElems, _info->_pv->chid, _info->_pv->value);
       if(result != ECA_NORMAL){
-        throw ChimeraTK::runtime_error(std::string("Failed to to read pv: ") + _info->_pv.name);
+        throw ChimeraTK::runtime_error(std::string("Failed to to read pv: ") + _info->_pv->name);
       }
       result = ca_pend_io(_backend->_caTimeout);
       if(result != ECA_TIMEOUT){
-        throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + _info->_pv.name);
+        throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + _info->_pv->name);
       }
 
 
     } else {
-      std::cerr << "Disconnected when filling catalogue entry for " << _info->_name << "(" << _info->_pv.name << ")" << std::endl;
+      std::cerr << "Disconnected when filling catalogue entry for " << _info->_name << "(" << _info->_pv->name << ")" << std::endl;
       return;
     }
 
@@ -163,7 +163,7 @@ namespace ChimeraTK{
   template<typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doPostRead(TransferType, bool hasNewData){
     if(!hasNewData) return;
-    EpicsType* tmp = (EpicsType*)dbr_value_ptr(_info->_pv.value, _info->_pv.dbrType);
+    EpicsType* tmp = (EpicsType*)dbr_value_ptr(_info->_pv->value, _info->_pv->dbrType);
     for(size_t i = 0; i < _numberOfWords; i++){
       EpicsType value = tmp[_offsetWords+i];
       // Fill the NDRegisterAccessor buffer
