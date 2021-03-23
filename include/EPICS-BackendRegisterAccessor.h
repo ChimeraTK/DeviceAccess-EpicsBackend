@@ -17,6 +17,7 @@
 #include "EPICS_types.h"
 #include "EPICS-Backend.h"
 #include <cadef.h>
+#include "EPICSVersionMapper.h"
 
 
 
@@ -43,6 +44,8 @@ namespace ChimeraTK{
         return std::numeric_limits<DestType>::max();
       } catch (boost::numeric::negative_overflow&) {
         return std::numeric_limits<DestType>::min();
+      } catch(...){
+        throw ChimeraTK::runtime_error("Data conversion failed for unknown reason.");
       }
     }
   };
@@ -77,7 +80,7 @@ namespace ChimeraTK{
     ChimeraTK::VersionNumber _currentVersion;
   };
 
-  template<typename EpicsType, typename CTKType>
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   class EpicsBackendRegisterAccessor : public EpicsBackendRegisterAccessorBase, public NDRegisterAccessor<CTKType> {
   public:
     ~EpicsBackendRegisterAccessor(){};
@@ -99,7 +102,7 @@ namespace ChimeraTK{
     void doPostRead(TransferType, bool hasNewData) override;
 
     bool isReadOnly() const override {
-     return _info->_isReadonly;
+     return (_info->_isReadable && !_info->_isWritable);
     }
 
     bool isReadable() const override {
@@ -107,7 +110,7 @@ namespace ChimeraTK{
     }
 
     bool isWriteable() const override {
-     return !_info->_isReadonly;
+     return _info->_isWritable;
     }
 
     void interrupt() override { this->interrupt_impl(this->_notifications);}
@@ -126,30 +129,39 @@ namespace ChimeraTK{
 
     friend class EpicsBackend;
 
-    EpicsRangeCheckingDataConverter<CTKType, EpicsType> toCTK;
+    EpicsRangeCheckingDataConverter<CTKType, EpicsBaseType> toCTK;
 
     EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, EpicsBackendRegisterInfo* registerInfo,
         AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister);
   };
 
-  template<typename EpicsType, typename CTKType>
-  EpicsBackendRegisterAccessor<EpicsType, CTKType>::EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, EpicsBackendRegisterInfo* registerInfo,
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
+  EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, EpicsBackendRegisterInfo* registerInfo,
           AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister):
           EpicsBackendRegisterAccessorBase(boost::dynamic_pointer_cast<EpicsBackend>(backend), registerInfo, numberOfWords, wordOffsetInRegister),
           NDRegisterAccessor<CTKType>(path, flags){
+    if(flags.has(AccessMode::raw))
+      throw ChimeraTK::logic_error("Raw access mode is not supported.");
     NDRegisterAccessor<CTKType>::buffer_2D.resize(1);
+    this->accessChannel(0).resize(numberOfWords);
+    // allocate value
+    _info->_pv->value = calloc(1, dbr_size_n(_info->_pv->dbrType, _info->_pv->nElems));
+    /* \ToDo: Use callback to get informed once the connection state changes.
+              Pass backend pointer and not pv as usr data and in the handler
+              use backend functions to handle connection change.
+    */
+    NDRegisterAccessor<CTKType>::_exceptionBackend = backend;
   }
 
-  template<typename EpicsType, typename CTKType>
-  void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doReadTransferSynchronously(){
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
+  void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously(){
     if(ca_state(_info->_pv->chid) == cs_conn){
-      _info->_pv->value = calloc(1, dbr_size_n(_info->_pv->dbrType, _info->_pv->nElems));
       auto result = ca_array_get(_info->_pv->dbrType, _info->_pv->nElems, _info->_pv->chid, _info->_pv->value);
       if(result != ECA_NORMAL){
         throw ChimeraTK::runtime_error(std::string("Failed to to read pv: ") + _info->_pv->name);
       }
       result = ca_pend_io(_backend->_caTimeout);
-      if(result != ECA_TIMEOUT){
+      if(result == ECA_TIMEOUT){
         throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + _info->_pv->name);
       }
 
@@ -160,16 +172,17 @@ namespace ChimeraTK{
     }
 
   }
-  template<typename EpicsType, typename CTKType>
-  void EpicsBackendRegisterAccessor<EpicsType, CTKType>::doPostRead(TransferType, bool hasNewData){
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
+  void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doPostRead(TransferType, bool hasNewData){
     if(!hasNewData) return;
-    EpicsType* tmp = (EpicsType*)dbr_value_ptr(_info->_pv->value, _info->_pv->dbrType);
+    EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(_info->_pv->value, _info->_pv->dbrType);
     for(size_t i = 0; i < _numberOfWords; i++){
-      EpicsType value = tmp[_offsetWords+i];
+      EpicsBaseType value = tmp[_offsetWords+i];
       // Fill the NDRegisterAccessor buffer
       this->accessData(i) = toCTK.convert(value);
     }
-    _currentVersion = ChimeraTK::VersionNumber();
+    EpicsType* tp = (EpicsType*)_info->_pv->value;
+    _currentVersion = VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
   }
 

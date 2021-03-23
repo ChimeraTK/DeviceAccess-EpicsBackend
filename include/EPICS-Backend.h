@@ -37,14 +37,14 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
   const RegisterInfo::DataDescriptor& getDataDescriptor() const override { return _dataDescriptor; }
 
-  bool isReadable() const override {return true;}
+  bool isReadable() const override {return _isReadable;}
 
-  bool isWriteable() const override {return !_isReadonly;}
+  bool isWriteable() const override {return _isWritable;}
 
   AccessModeFlags getSupportedAccessModes() const override {return _accessModes;}
 
   RegisterPath _name;
-  bool _isReadonly;
+  bool _isReadable{true}, _isWritable{true};
   RegisterInfo::DataDescriptor _dataDescriptor;
   AccessModeFlags _accessModes{};
 
@@ -107,7 +107,7 @@ protected:
 
   bool isAsyncReadActive(){return _asyncReadActivated;}
 
-  template<typename UAType, typename CTKType>
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   friend class EpicsBackendRegisterAccessor;
 
 private:
@@ -127,6 +127,8 @@ private:
   void fillCatalogueFromMapFile(const std::string &mapfile);
 
   void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
+
+  void configureChannel(EpicsBackendRegisterInfo *info);
 
 };
 
