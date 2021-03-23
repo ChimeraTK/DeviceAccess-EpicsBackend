@@ -77,7 +77,9 @@ protected:
    _isFunctional = true;
   };
 
-  void close() override {};
+  void close() override {
+    _opened = false;
+  };
 
   std::string readDeviceInfo() override {
     std::stringstream ss;
