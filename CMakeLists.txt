@@ -31,6 +31,8 @@ target_link_libraries(${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES} ${Chim
 
 add_executable(testRead test/read.C)
 target_link_libraries(testRead ${EPICS_LIBRARIES})
+add_executable(testReadAsync test/readAsync.C)
+target_link_libraries(testReadAsync ${EPICS_LIBRARIES})
 
 #Install the library and the executables
 install(TARGETS ${PROJECT_NAME}
