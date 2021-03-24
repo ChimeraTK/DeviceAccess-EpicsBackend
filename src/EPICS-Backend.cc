@@ -33,7 +33,6 @@ extern "C"{
 
 namespace ChimeraTK{
   EpicsBackend::BackendRegisterer EpicsBackend::backendRegisterer;
-//  bool EpicsBackend::ready;
 
   EpicsBackend::EpicsBackend(const std::string &mapfile): _catalogue_filled(false){
     FILL_VIRTUAL_FUNCTION_TEMPLATE_VTABLE(getRegisterAccessor_impl);
@@ -50,14 +49,16 @@ namespace ChimeraTK{
     _isFunctional = true;
   }
 
-//  void EpicsBackend::channelStateHandler(connection_handler_args args){
-//    if(args.op == CA_OP_CONN_UP){
-//      std::cout << "Channel access established." << std::endl;
-//      EpicsBackend::ready = true;
-//    } else if (args.op == CA_OP_CONN_DOWN){
-//      std::cout << "Channel access closed." << std::endl;
-//    }
-//  }
+  void EpicsBackend::channelStateHandler(connection_handler_args args){
+    auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
+    if(args.op == CA_OP_CONN_UP){
+      std::cout << "Channel access established." << std::endl;
+      backend->_isFunctional = true;
+    } else if (args.op == CA_OP_CONN_DOWN){
+      std::cout << "Channel access closed." << std::endl;
+      backend->_isFunctional = false;
+    }
+  }
 
   template<typename UserType>
   boost::shared_ptr< NDRegisterAccessor<UserType> > EpicsBackend::getRegisterAccessor_impl(
@@ -142,8 +143,7 @@ namespace ChimeraTK{
     info->_pv->name = (char*)info->_caName.c_str();
 
     pv* ptr = info->_pv.get();
-//    auto result = ca_create_channel(info->_pv->name, EpicsBackend::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
-    auto result = ca_create_channel(info->_pv->name, 0, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
+    auto result = ca_create_channel(info->_pv->name, EpicsBackend::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
     if(result != ECA_NORMAL){
       std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info->_pv->name << std::endl;
       return;
@@ -206,16 +206,15 @@ namespace ChimeraTK{
     } else {
       ChimeraTK::runtime_error(std::string("Failed reading mapfile: ") + mapfileName);
     }
-    // Connect all channels with one call ca_pend_io?!
-    auto result = ca_pend_io(_caTimeout);
-//    auto result = ca_flush_io();
+
+    auto result = ca_flush_io();
     if(result == ECA_TIMEOUT){
       ChimeraTK::runtime_error("Channel setup failed.");
       return;
     }
-//    while(!EpicsBackend::ready){
-//      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//    }
+    while(!_isFunctional){
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     for(auto it = _catalogue_mutable.begin(), ite = _catalogue_mutable.end(); it != ite; it++){
         configureChannel(dynamic_cast<EpicsBackendRegisterInfo*>(&(*it)));
     }
