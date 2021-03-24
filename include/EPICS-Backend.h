@@ -61,6 +61,8 @@ class EpicsBackend : public DeviceBackendImpl{
 public:
   ~EpicsBackend(){ca_context_destroy();}
   static boost::shared_ptr<DeviceBackend> createInstance(std::string address, std::map<std::string,std::string> parameters);
+//  static void channelStateHandler(connection_handler_args args);
+//  static bool ready;
 
 protected:
   EpicsBackend(const std::string &mapfile = "");

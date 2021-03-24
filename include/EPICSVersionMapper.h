@@ -15,6 +15,7 @@
 
 using timePoint_t = std::chrono::time_point<std::chrono::system_clock,std::chrono::duration<int64_t,std::nano> > ;
 
+namespace EPICS{
 /**
  * This class is needed, because if two accessors are create and receive the same data from the server their
  * VersionNumber is required to be identical. Since the VersionNumber is not identical just because it is created
@@ -46,3 +47,4 @@ class VersionMapper {
 
   constexpr static size_t maxSizeEventIdMap = 2000;
 };
+}

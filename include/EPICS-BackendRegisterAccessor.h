@@ -14,6 +14,8 @@
 
 #include <boost/enable_shared_from_this.hpp>
 
+#include "string.h"
+
 #include "EPICS_types.h"
 #include "EPICS-Backend.h"
 #include <cadef.h>
@@ -73,17 +75,26 @@ namespace ChimeraTK{
       _info(info), _backend(backend), _numberOfWords(numberOfWords), _offsetWords(wordOffsetInRegister){
     }
     EpicsBackendRegisterInfo* _info;
-    cppext::future_queue<void*> _notifications;
+    cppext::future_queue<evargs> _notifications;
     boost::shared_ptr<EpicsBackend> _backend;
     size_t _numberOfWords; ///< Requested array length. Could be smaller than what is available on the server.
     size_t _offsetWords; ///< Requested offset for arrays.
     ChimeraTK::VersionNumber _currentVersion;
+    evid* _subscriptionId; ///< Id used for subscriptions
+
+    static void handleEvent(evargs args){
+      auto base = reinterpret_cast<EpicsBackendRegisterAccessorBase*>(args.usr);
+      base->_notifications.push_overwrite(args);
+    }
   };
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   class EpicsBackendRegisterAccessor : public EpicsBackendRegisterAccessorBase, public NDRegisterAccessor<CTKType> {
   public:
-    ~EpicsBackendRegisterAccessor(){};
+    ~EpicsBackendRegisterAccessor(){
+//      ca_clear_channel(_info->_pv->chid);
+//      ca_pend_io(_backend->_caTimeout);
+    };
 
     void doReadTransferSynchronously() override;
 
@@ -150,6 +161,20 @@ namespace ChimeraTK{
               Pass backend pointer and not pv as usr data and in the handler
               use backend functions to handle connection change.
     */
+    if(flags.has(AccessMode::wait_for_new_data)){
+      _notifications = cppext::future_queue<evargs>(3);
+      _readQueue = _notifications.then<void>([this](evargs &args){memcpy(_info->_pv->value, args.dbr, dbr_size_n(args.type, args.count));});
+      _subscriptionId = new evid();
+      ca_create_subscription(_info->_pv->dbrType,
+          _info->_pv->nElems,
+          _info->_pv->chid,
+          DBE_VALUE,
+          &EpicsBackendRegisterAccessorBase::handleEvent,
+          static_cast<EpicsBackendRegisterAccessorBase*>(this),
+          _subscriptionId);
+      ca_flush_io();
+    }
+
     NDRegisterAccessor<CTKType>::_exceptionBackend = backend;
   }
 
@@ -182,7 +207,7 @@ namespace ChimeraTK{
       this->accessData(i) = toCTK.convert(value);
     }
     EpicsType* tp = (EpicsType*)_info->_pv->value;
-    _currentVersion = VersionMapper::getInstance().getVersion(tp[0].stamp);
+    _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
   }
 
