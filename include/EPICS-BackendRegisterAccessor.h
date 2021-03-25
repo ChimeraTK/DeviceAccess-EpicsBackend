@@ -80,6 +80,7 @@ namespace ChimeraTK{
     size_t _offsetWords; ///< Requested offset for arrays.
     ChimeraTK::VersionNumber _currentVersion;
     evid* _subscriptionId; ///< Id used for subscriptions
+    bool _asyncActive{false};
 
     static void handleEvent(evargs args){
       auto base = reinterpret_cast<EpicsBackendRegisterAccessorBase*>(args.usr);
@@ -173,6 +174,7 @@ namespace ChimeraTK{
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       ChannelManager::getInstance().channelMap.at(_info->_pv->chid)._accessors.push_back(this);
       }
+      _asyncActive = true;
       ca_flush_io();
     }
 
