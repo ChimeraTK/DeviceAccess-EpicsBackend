@@ -11,11 +11,12 @@
 
 #include "EPICS-Backend.h"
 #include "EPICS-BackendRegisterAccessor.h"
-
 #include <ChimeraTK/BackendFactory.h>
 #include <ChimeraTK/DeviceAccessVersion.h>
 
 #include <boost/tokenizer.hpp>
+
+#include "EPICSChannelManager.h"
 typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
 extern "C"{
@@ -36,7 +37,6 @@ namespace ChimeraTK{
 
   EpicsBackend::EpicsBackend(const std::string &mapfile): _catalogue_filled(false){
     FILL_VIRTUAL_FUNCTION_TEMPLATE_VTABLE(getRegisterAccessor_impl);
-//    EpicsBackend::ready = false;
     auto result = ca_context_create(ca_enable_preemptive_callback);
     if (result != ECA_NORMAL) {
       std::stringstream ss;
@@ -49,15 +49,10 @@ namespace ChimeraTK{
     _isFunctional = true;
   }
 
-  void EpicsBackend::channelStateHandler(connection_handler_args args){
-    auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
-    if(args.op == CA_OP_CONN_UP){
-      std::cout << "Channel access established." << std::endl;
-      backend->_isFunctional = true;
-    } else if (args.op == CA_OP_CONN_DOWN){
-      std::cout << "Channel access closed." << std::endl;
-      backend->_isFunctional = false;
-    }
+  void EpicsBackend::activateAsyncRead()noexcept{
+    if(!_opened || !_isFunctional)
+      return;
+    asyncReadActive = true;
   }
 
   template<typename UserType>
@@ -142,11 +137,18 @@ namespace ChimeraTK{
     info->_caName = std::string(*pvName.get());
     info->_pv->name = (char*)info->_caName.c_str();
 
-    pv* ptr = info->_pv.get();
-    auto result = ca_create_channel(info->_pv->name, EpicsBackend::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
-    if(result != ECA_NORMAL){
-      std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info->_pv->name << std::endl;
-      return;
+    bool channelAlreadyCreated = false;
+    for(auto item: ChannelManager::getInstance().channelMap){
+      if(item.second.isChannelName(info->_caName))
+        channelAlreadyCreated = true;
+    }
+    if(!channelAlreadyCreated){
+      auto result = ca_create_channel(info->_pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
+      ChannelManager::getInstance().channelMap.insert(std::make_pair(info->_pv->chid,ChannelManager::ChannelInfo(info->_caName)));
+      if(result != ECA_NORMAL){
+        std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info->_pv->name << std::endl;
+        return;
+      }
     }
     _catalogue_mutable.addRegister(info);
   }
@@ -217,6 +219,21 @@ namespace ChimeraTK{
     }
     for(auto it = _catalogue_mutable.begin(), ite = _catalogue_mutable.end(); it != ite; it++){
         configureChannel(dynamic_cast<EpicsBackendRegisterInfo*>(&(*it)));
+    }
+  }
+
+  void EpicsBackend::setException(){
+    _isFunctional = false;
+    asyncReadActive = false;
+    auto channelMap = ChannelManager::getInstance().channelMap;
+    for(auto &mapItem : channelMap){
+      for(auto &accessor : mapItem.second._accessors){
+        try{
+          throw ChimeraTK::runtime_error("Exception reported by another accessor.");
+        } catch (...){
+          accessor->_notifications.push_exception(std::current_exception());
+        }
+      }
     }
   }
 }

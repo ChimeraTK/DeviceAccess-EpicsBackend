@@ -16,9 +16,8 @@
 #include <string.h>
 #include <memory>
 
-
-
 namespace ChimeraTK {
+
 struct EpicsBackendRegisterInfo : public RegisterInfo {
 
   EpicsBackendRegisterInfo(const RegisterPath &path):_name(path){};
@@ -53,29 +52,29 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
   // this is needed because the name inside _pv is just a pointer
   std::string _caName;
 
-
-
 };
 
 class EpicsBackend : public DeviceBackendImpl{
 public:
-  ~EpicsBackend(){ca_context_destroy();}
+  ~EpicsBackend(){if(_isFunctional) ca_context_destroy();}
   static boost::shared_ptr<DeviceBackend> createInstance(std::string address, std::map<std::string,std::string> parameters);
-  static void channelStateHandler(connection_handler_args args);
+  void setBackendState(bool isFunctional){_isFunctional = isFunctional;}
+
+  bool asyncReadActive{false};
 
 protected:
   EpicsBackend(const std::string &mapfile = "");
 
   /**
-   * Return the catalogue and if not filled yet fill it.
+   * Return the catalog and if not filled yet fill it.
    */
   const RegisterCatalogue& getRegisterCatalogue() const override {return _catalogue_mutable;};
 
-  void setException() override {};
+  void setException() override;
 
   void open() override {
-    _opened = true;
-   _isFunctional = true;
+    if(_isFunctional)
+      _opened = true;
   };
 
   void close() override {
@@ -90,7 +89,7 @@ protected:
 
   bool isFunctional() const override {return _isFunctional;};
 
-  void activateAsyncRead() noexcept override {};
+  void activateAsyncRead() noexcept override;
 
   template<typename UserType>
   boost::shared_ptr< NDRegisterAccessor<UserType> > getRegisterAccessor_impl(const RegisterPath &registerPathName, size_t numberOfWords, size_t wordOffsetInRegister, AccessModeFlags flags);
@@ -98,7 +97,7 @@ protected:
   DEFINE_VIRTUAL_FUNCTION_TEMPLATE_VTABLE_FILLER( EpicsBackend, getRegisterAccessor_impl, 4);
 
 
-  /** We need to make the catalogue mutable, since we fill it within getRegisterCatalogue() */
+  /** We need to make the catalog mutable, since we fill it within getRegisterCatalogue() */
   mutable RegisterCatalogue _catalogue_mutable;
 
   /** Class to register the backend type with the factory. */
@@ -115,9 +114,9 @@ protected:
 
 private:
   /**
-   * Catalogue is filled when device is opened. When working with LogicalNameMapping the
-   * catalogue is requested even if the device is not opened!
-   * Keep track if catalogue is filled using this bool.
+   * Catalog is filled when device is opened. When working with LogicalNameMapping the
+   * Catalog is requested even if the device is not opened!
+   * Keep track if catalog is filled using this bool.
    */
   bool _catalogue_filled;
 

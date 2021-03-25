@@ -19,10 +19,9 @@
 #include "EPICS_types.h"
 #include "EPICS-Backend.h"
 #include <cadef.h>
+
+#include "EPICSChannelManager.h"
 #include "EPICSVersionMapper.h"
-
-
-
 
 namespace ChimeraTK{
 
@@ -84,7 +83,8 @@ namespace ChimeraTK{
 
     static void handleEvent(evargs args){
       auto base = reinterpret_cast<EpicsBackendRegisterAccessorBase*>(args.usr);
-      base->_notifications.push_overwrite(args);
+      if(base->_backend->asyncReadActive)
+        base->_notifications.push_overwrite(args);
     }
   };
 
@@ -172,6 +172,7 @@ namespace ChimeraTK{
           &EpicsBackendRegisterAccessorBase::handleEvent,
           static_cast<EpicsBackendRegisterAccessorBase*>(this),
           _subscriptionId);
+      ChannelManager::getInstance().channelMap.at(_info->_pv->chid)._accessors.push_back(this);
       ca_flush_io();
     }
 
