@@ -26,6 +26,7 @@ namespace ChimeraTK{
     } else if (args.op == CA_OP_CONN_DOWN){
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       auto channelInfo = ChannelManager::getInstance().channelMap.at(args.chid);
       for( auto &ch : channelInfo._accessors){
         try{

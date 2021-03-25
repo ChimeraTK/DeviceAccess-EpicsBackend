@@ -91,10 +91,7 @@ namespace ChimeraTK{
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   class EpicsBackendRegisterAccessor : public EpicsBackendRegisterAccessorBase, public NDRegisterAccessor<CTKType> {
   public:
-    ~EpicsBackendRegisterAccessor(){
-//      ca_clear_channel(_info->_pv->chid);
-//      ca_pend_io(_backend->_caTimeout);
-    };
+    ~EpicsBackendRegisterAccessor();
 
     void doReadTransferSynchronously() override;
 
@@ -172,7 +169,10 @@ namespace ChimeraTK{
           &EpicsBackendRegisterAccessorBase::handleEvent,
           static_cast<EpicsBackendRegisterAccessorBase*>(this),
           _subscriptionId);
+      {
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       ChannelManager::getInstance().channelMap.at(_info->_pv->chid)._accessors.push_back(this);
+      }
       ca_flush_io();
     }
 
@@ -210,6 +210,23 @@ namespace ChimeraTK{
     EpicsType* tp = (EpicsType*)_info->_pv->value;
     _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
+  }
+
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
+  EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::~EpicsBackendRegisterAccessor(){
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto entry = ChannelManager::getInstance().channelMap.at(_info->_pv->chid);
+    bool erased = false;
+    for(auto itaccessor = entry._accessors.begin(); itaccessor != entry._accessors.end(); ++itaccessor){
+      if(this == *itaccessor){
+        entry._accessors.erase(itaccessor);
+        erased = true;
+        break;
+      }
+    }
+    if(!erased){
+      ChimeraTK::runtime_error(std::string("Failed to erase accessor for pv:")+_info->_caName);
+    }
   }
 
 }

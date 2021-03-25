@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <mutex>
 
 #include "EPICS_types.h"
 
@@ -36,6 +37,8 @@ public:
     bool operator==(const ChannelInfo& other);
 
   };
+
+  std::mutex mapLock;
 
   std::map<chid,ChannelInfo> channelMap;
 };

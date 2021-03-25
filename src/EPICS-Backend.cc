@@ -136,7 +136,7 @@ namespace ChimeraTK{
     info->_pv.reset((pv*)calloc(1, sizeof(pv)));
     info->_caName = std::string(*pvName.get());
     info->_pv->name = (char*)info->_caName.c_str();
-
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     bool channelAlreadyCreated = false;
     for(auto item: ChannelManager::getInstance().channelMap){
       if(item.second.isChannelName(info->_caName))
@@ -225,6 +225,7 @@ namespace ChimeraTK{
   void EpicsBackend::setException(){
     _isFunctional = false;
     asyncReadActive = false;
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     auto channelMap = ChannelManager::getInstance().channelMap;
     for(auto &mapItem : channelMap){
       for(auto &accessor : mapItem.second._accessors){
