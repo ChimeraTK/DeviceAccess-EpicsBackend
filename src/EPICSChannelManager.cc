@@ -32,8 +32,7 @@ namespace ChimeraTK{
         try{
           throw ChimeraTK::runtime_error(std::string("Channel for PV ") + ChannelManager::getInstance().channelMap.at(args.chid)._caName + " was disconnected.");
         } catch(...){
-          if(ch->_asyncActive)
-            ch->_notifications.push_overwrite_exception(std::current_exception());
+          ch->_notifications.push_overwrite_exception(std::current_exception());
         }
       }
     }
