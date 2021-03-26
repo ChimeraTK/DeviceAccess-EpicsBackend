@@ -78,6 +78,7 @@ namespace ChimeraTK{
     boost::shared_ptr<EpicsBackend> _backend;
     size_t _numberOfWords; ///< Requested array length. Could be smaller than what is available on the server.
     size_t _offsetWords; ///< Requested offset for arrays.
+    bool _isPartial{false};
     ChimeraTK::VersionNumber _currentVersion;
     evid* _subscriptionId; ///< Id used for subscriptions
 
@@ -105,7 +106,7 @@ namespace ChimeraTK{
         throw ChimeraTK::logic_error("Write operation not allowed while device is closed.");
     }
 
-    bool doWriteTransfer(VersionNumber /*versionNumber*/={}) override {return true;};
+    bool doWriteTransfer(VersionNumber /*versionNumber*/={}) override;
 
     void doPostRead(TransferType, bool hasNewData) override;
 
@@ -138,6 +139,7 @@ namespace ChimeraTK{
     friend class EpicsBackend;
 
     EpicsRangeCheckingDataConverter<CTKType, EpicsBaseType> toCTK;
+    EpicsRangeCheckingDataConverter<EpicsBaseType,CTKType> toEpics;
 
     EpicsBackendRegisterAccessor(const RegisterPath &path, boost::shared_ptr<DeviceBackend> backend, EpicsBackendRegisterInfo* registerInfo,
         AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister);
@@ -175,12 +177,16 @@ namespace ChimeraTK{
       }
       ca_flush_io();
     }
-
+    if(_info->_pv->nElems != numberOfWords)
+      _isPartial = true;
     NDRegisterAccessor<CTKType>::_exceptionBackend = backend;
   }
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously(){
+    if(!_backend->isFunctional()){
+      throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
+    }
     if(ca_state(_info->_pv->chid) == cs_conn){
       auto result = ca_array_get(_info->_pv->dbrType, _info->_pv->nElems, _info->_pv->chid, _info->_pv->value);
       if(result != ECA_NORMAL){
@@ -210,6 +216,32 @@ namespace ChimeraTK{
     EpicsType* tp = (EpicsType*)_info->_pv->value;
     _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
+  }
+
+
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
+  bool EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doWriteTransfer(VersionNumber /*versionNumber*/){
+    if(!_backend->isFunctional()) {
+      throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
+    }
+    if(_isPartial)
+      EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
+
+    EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(_info->_pv->value, _info->_pv->dbrType);
+    for(size_t i = 0; i < _numberOfWords; i++){
+      tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
+    }
+    auto result = ca_array_put(_info->_pv->dbfType, _info->_pv->nElems,_info->_pv->chid,tmp);
+    if(result != ECA_NORMAL){
+      std::cerr << "Failed to to write pv: " << _info->_caName << std::endl;
+      return false;
+    }
+    result = ca_pend_io(_backend->_caTimeout);
+    if(result == ECA_TIMEOUT){
+      std::cerr << "Timeout while writing pv: " << _info->_caName << std::endl;
+      return false;
+    }
+    return true;
   }
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
