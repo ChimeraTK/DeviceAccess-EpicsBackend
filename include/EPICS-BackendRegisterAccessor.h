@@ -173,9 +173,8 @@ namespace ChimeraTK{
           static_cast<EpicsBackendRegisterAccessorBase*>(this),
           _subscriptionId);
       {
-      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-      std::cout << "Pushing pointer to map: " << this << std::endl;
-      ChannelManager::getInstance().channelMap.at(_info->_pv->chid)._accessors.push_back(this);
+      std::cout << "Pushing pointer to map: " << this << dynamic_cast<EpicsBackendRegisterAccessorBase*>(this) << std::endl;
+      ChannelManager::getInstance().addAccessor(_info->_pv->chid, this);
       }
       ca_flush_io();
     }
@@ -250,22 +249,7 @@ namespace ChimeraTK{
   EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::~EpicsBackendRegisterAccessor(){
     if(_subscriptionId){
       std::cout << "Destructor for accessor " << _info->_caName << " from map" << std::endl;
-      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-      auto entry = &ChannelManager::getInstance().channelMap.at(_info->_pv->chid);
-      bool erased = false;
-      for(auto itaccessor = entry->_accessors.begin(); itaccessor != entry->_accessors.end(); ++itaccessor){
-        std::cout << "Found pointer in map: " << *itaccessor << " this: " << this << "\t" << dynamic_cast<EpicsBackendRegisterAccessorBase*>(this) << std::endl;
-        if(dynamic_cast<EpicsBackendRegisterAccessorBase*>(this) == *itaccessor){
-          entry->_accessors.erase(itaccessor);
-          std::cout << "Erased accessor " << entry->_caName << " from map" << std::endl;
-          erased = true;
-          break;
-        }
-      }
-      if(!erased){
-        std::cout << "Failed to erase accessor for pv:" << _info->_caName << std::endl;
-  //      ChimeraTK::runtime_error(std::string("Failed to erase accessor for pv:")+_info->_caName);
-      }
+      ChannelManager::getInstance().removeAccessor(_info->_pv->chid, this);
     }
   }
 

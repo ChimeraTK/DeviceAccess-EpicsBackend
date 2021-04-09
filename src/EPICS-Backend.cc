@@ -145,15 +145,10 @@ namespace ChimeraTK{
     info->_pv.reset((pv*)calloc(1, sizeof(pv)));
     info->_caName = std::string(*pvName.get());
     info->_pv->name = (char*)info->_caName.c_str();
-    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    bool channelAlreadyCreated = false;
-    for(auto item: ChannelManager::getInstance().channelMap){
-      if(item.second.isChannelName(info->_caName))
-        channelAlreadyCreated = true;
-    }
+    bool channelAlreadyCreated = ChannelManager::getInstance().channelPresent(info->_caName);
     if(!channelAlreadyCreated){
       auto result = ca_create_channel(info->_pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
-      ChannelManager::getInstance().channelMap.insert(std::make_pair(info->_pv->chid,ChannelManager::ChannelInfo(info->_caName)));
+      ChannelManager::getInstance().addChannel(info->_pv->chid,info->_caName);
       if(result != ECA_NORMAL){
         std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info->_pv->name << std::endl;
         return;
@@ -234,16 +229,6 @@ namespace ChimeraTK{
   void EpicsBackend::setException(){
     _isFunctional = false;
     _asyncReadActivated = false;
-    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    auto channelMap = ChannelManager::getInstance().channelMap;
-    for(auto &mapItem : channelMap){
-      for(auto &accessor : mapItem.second._accessors){
-        try{
-          throw ChimeraTK::runtime_error("Exception reported by another accessor.");
-        } catch (...){
-          accessor->_notifications.push_exception(std::current_exception());
-        }
-      }
-    }
+    ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
   }
 }

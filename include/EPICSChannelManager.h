@@ -38,6 +38,16 @@ public:
 
   };
 
+  void addChannel(const chid &chidIn, const std::string name);
+
+  bool channelPresent(const std::string name);
+
+  void addAccessor(const chid &chidIn, EpicsBackendRegisterAccessorBase* accessor);
+
+  void removeAccessor(const chid &chidIn, EpicsBackendRegisterAccessorBase* accessor);
+
+  void setException(const std::string error);
+private:
   std::mutex mapLock;
 
   std::map<chid,ChannelInfo> channelMap;

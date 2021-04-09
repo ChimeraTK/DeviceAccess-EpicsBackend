@@ -37,4 +37,56 @@ namespace ChimeraTK{
       }
     }
   }
+
+
+  void ChannelManager::addChannel(const chid &chidIn, const std::string name){
+    std::lock_guard<std::mutex> lock(mapLock);
+    channelMap.insert(std::make_pair(chidIn, ChannelInfo(name)));
+  }
+
+  bool ChannelManager::channelPresent(const std::string name){
+    std::lock_guard<std::mutex> lock(mapLock);
+    for(auto item : channelMap){
+      if(item.second.isChannelName(name))
+        return true;
+    }
+    return false;
+  }
+
+  void ChannelManager::addAccessor(const chid &chidIn, EpicsBackendRegisterAccessorBase* accessor){
+    std::lock_guard<std::mutex> lock(mapLock);
+    channelMap.at(chidIn)._accessors.push_back(accessor);
+  }
+
+  void ChannelManager::removeAccessor(const chid &chidIn, EpicsBackendRegisterAccessorBase* accessor){
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto entry = &channelMap.at(chidIn);
+    bool erased = false;
+    for(auto itaccessor = entry->_accessors.begin(); itaccessor != entry->_accessors.end(); ++itaccessor){
+      std::cout << "Found pointer in map: " << *itaccessor << " this: " << this << std::endl;
+      if(accessor == *itaccessor){
+        entry->_accessors.erase(itaccessor);
+        std::cout << "Erased accessor " << entry->_caName << " from map" << std::endl;
+        erased = true;
+        break;
+      }
+    }
+    if(!erased){
+      std::cout << "Failed to erase accessor for pv:" << entry->_caName << std::endl;
+//      ChimeraTK::runtime_error(std::string("Failed to erase accessor for pv:")+_info->_caName);
+    }
+  }
+
+  void ChannelManager::setException(const std::string error){
+    std::lock_guard<std::mutex> lock(mapLock);
+    for(auto &mapItem : channelMap){
+      for(auto &accessor : mapItem.second._accessors){
+        try{
+          throw ChimeraTK::runtime_error(error);
+        } catch (...){
+          accessor->_notifications.push_exception(std::current_exception());
+        }
+      }
+    }
+  }
 }
