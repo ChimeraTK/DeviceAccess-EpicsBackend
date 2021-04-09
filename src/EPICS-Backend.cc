@@ -50,10 +50,8 @@ namespace ChimeraTK{
   }
 
   EpicsBackend::~EpicsBackend(){
-    std::cout << "Backend destructor called." << std::endl;
     _asyncReadActivated = false;
-//    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-//    ChannelManager::getInstance().channelMap.clear();
+    ChannelManager::getInstance().cleanup();
     if(_isFunctional)
       ca_context_destroy();
   }
