@@ -173,7 +173,6 @@ namespace ChimeraTK{
           static_cast<EpicsBackendRegisterAccessorBase*>(this),
           _subscriptionId);
       {
-      std::cout << "Pushing pointer to map: " << this << dynamic_cast<EpicsBackendRegisterAccessorBase*>(this) << std::endl;
       ChannelManager::getInstance().addAccessor(_info->_pv->chid, this);
       }
       ca_flush_io();
@@ -248,7 +247,6 @@ namespace ChimeraTK{
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::~EpicsBackendRegisterAccessor(){
     if(_subscriptionId){
-      std::cout << "Destructor for accessor " << _info->_caName << " from map" << std::endl;
       ChannelManager::getInstance().removeAccessor(_info->_pv->chid, this);
     }
   }
