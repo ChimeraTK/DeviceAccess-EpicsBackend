@@ -227,8 +227,11 @@ namespace ChimeraTK{
   }
 
   void EpicsBackend::setException(){
+    //\ToDo: Why I have to check is functional here? If not setException is called constantly and which means _isFunctional will stay false even if reset in the state handler.
+    if(_isFunctional){
     _isFunctional = false;
     _asyncReadActivated = false;
     ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
+    }
   }
 }
