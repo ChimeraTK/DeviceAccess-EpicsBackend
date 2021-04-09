@@ -10,9 +10,19 @@
 
 namespace ChimeraTK{
 
+  ChannelManager::~ChannelManager(){
+    std::lock_guard<std::mutex> lock(mapLock);
+    channelMap.clear();
+  }
+
   bool ChannelManager::ChannelInfo::isChannelName(std::string channelName){
     return _caName.compare(channelName) == 0;
   }
+
+  ChannelManager& ChannelManager::getInstance(){
+      static ChannelManager manager;
+      return manager;
+    }
 
   bool ChannelManager::ChannelInfo::operator==(const ChannelInfo& other){
     return other._caName.compare(_caName);
@@ -27,12 +37,15 @@ namespace ChimeraTK{
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-      auto channelInfo = ChannelManager::getInstance().channelMap.at(args.chid);
-      for( auto &ch : channelInfo._accessors){
-        try{
-          throw ChimeraTK::runtime_error(std::string("Channel for PV ") + ChannelManager::getInstance().channelMap.at(args.chid)._caName + " was disconnected.");
-        } catch(...){
-          ch->_notifications.push_overwrite_exception(std::current_exception());
+      // check if channel is in map -> map might be already cleared.
+      if(ChannelManager::getInstance().channelMap.count(args.chid)){
+        auto channelInfo = ChannelManager::getInstance().channelMap.at(args.chid);
+        for( auto &ch : channelInfo._accessors){
+          try{
+            throw ChimeraTK::runtime_error(std::string("Channel for PV ") + ChannelManager::getInstance().channelMap.at(args.chid)._caName + " was disconnected.");
+          } catch(...){
+            ch->_notifications.push_overwrite_exception(std::current_exception());
+          }
         }
       }
     }
@@ -60,20 +73,20 @@ namespace ChimeraTK{
 
   void ChannelManager::removeAccessor(const chid &chidIn, EpicsBackendRegisterAccessorBase* accessor){
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    auto entry = &channelMap.at(chidIn);
-    bool erased = false;
-    for(auto itaccessor = entry->_accessors.begin(); itaccessor != entry->_accessors.end(); ++itaccessor){
-      std::cout << "Found pointer in map: " << *itaccessor << " this: " << this << std::endl;
-      if(accessor == *itaccessor){
-        entry->_accessors.erase(itaccessor);
-        std::cout << "Erased accessor " << entry->_caName << " from map" << std::endl;
-        erased = true;
-        break;
+    // check if channel is in map -> map might be already cleared.
+    if(channelMap.count(chidIn)){
+      auto entry = &channelMap.at(chidIn);
+      bool erased = false;
+      for(auto itaccessor = entry->_accessors.begin(); itaccessor != entry->_accessors.end(); ++itaccessor){
+        if(accessor == *itaccessor){
+          entry->_accessors.erase(itaccessor);
+          erased = true;
+          break;
+        }
       }
-    }
-    if(!erased){
-      std::cout << "Failed to erase accessor for pv:" << entry->_caName << std::endl;
-//      ChimeraTK::runtime_error(std::string("Failed to erase accessor for pv:")+_info->_caName);
+      if(!erased){
+        std::cout << "Failed to erase accessor for pv:" << entry->_caName << std::endl;
+      }
     }
   }
 
