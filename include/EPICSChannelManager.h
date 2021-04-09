@@ -6,7 +6,7 @@
  */
 
 #pragma once
-#include <vector>
+#include <deque>
 #include <map>
 #include <string>
 #include <mutex>
@@ -27,7 +27,7 @@ public:
   static void channelStateHandler(connection_handler_args args);
 
   struct ChannelInfo{
-    std::vector<EpicsBackendRegisterAccessorBase*> _accessors;
+    std::deque<EpicsBackendRegisterAccessorBase*> _accessors;
     std::string _caName;
 
     ChannelInfo(std::string channelName):_caName(channelName){};
