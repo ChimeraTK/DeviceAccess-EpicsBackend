@@ -56,11 +56,10 @@ struct EpicsBackendRegisterInfo : public RegisterInfo {
 
 class EpicsBackend : public DeviceBackendImpl{
 public:
-  ~EpicsBackend(){if(_isFunctional) ca_context_destroy();}
+  ~EpicsBackend();
   static boost::shared_ptr<DeviceBackend> createInstance(std::string address, std::map<std::string,std::string> parameters);
   void setBackendState(bool isFunctional){_isFunctional = isFunctional;}
-
-  bool asyncReadActive{false};
+  bool _asyncReadActivated{false};
 
 protected:
   EpicsBackend(const std::string &mapfile = "");
@@ -121,8 +120,6 @@ private:
   bool _catalogue_filled;
 
   bool _isFunctional{false};
-
-  bool _asyncReadActivated{false};
 
   double _caTimeout{1.0};
 

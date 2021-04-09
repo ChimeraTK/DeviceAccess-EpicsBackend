@@ -49,10 +49,16 @@ namespace ChimeraTK{
     _isFunctional = true;
   }
 
+  EpicsBackend::~EpicsBackend(){
+    if(_isFunctional)
+      ca_context_destroy();
+    ChannelManager::getInstance().channelMap.clear();
+  }
+
   void EpicsBackend::activateAsyncRead()noexcept{
     if(!_opened || !_isFunctional)
       return;
-    asyncReadActive = true;
+    _asyncReadActivated = true;
   }
 
   template<typename UserType>
@@ -224,7 +230,7 @@ namespace ChimeraTK{
 
   void EpicsBackend::setException(){
     _isFunctional = false;
-    asyncReadActive = false;
+    _asyncReadActivated = false;
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     auto channelMap = ChannelManager::getInstance().channelMap;
     for(auto &mapItem : channelMap){

@@ -84,7 +84,7 @@ namespace ChimeraTK{
 
     static void handleEvent(evargs args){
       auto base = reinterpret_cast<EpicsBackendRegisterAccessorBase*>(args.usr);
-      if(base->_backend->asyncReadActive)
+      if(base->_backend->_asyncReadActivated)
         base->_notifications.push_overwrite(args);
     }
   };
