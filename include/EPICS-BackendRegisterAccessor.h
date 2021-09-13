@@ -75,7 +75,7 @@ namespace ChimeraTK{
   template <>
   class EpicsRangeCheckingDataConverter<std::string,Void>{
   public:
-    std::string convert(Void& x){
+    std::string convert(Void& /*x*/){
       return std::string("void");
     }
   };
