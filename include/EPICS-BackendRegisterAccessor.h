@@ -51,11 +51,32 @@ namespace ChimeraTK{
     }
   };
 
+  template<typename DestType>
+  class EpicsRangeCheckingDataConverter<DestType, Void> {
+   public:
+    DestType convert([[maybe_unused]] Void& x) { return DestType(); } // default constructed value
+  };
+
+  //partial specialization of conversion to void
+  template<typename SourceType>
+  class EpicsRangeCheckingDataConverter<Void, SourceType> {
+   public:
+    Void convert([[maybe_unused]] SourceType& x) { return Void(); }
+  };
+
   template <typename SourceType>
   class EpicsRangeCheckingDataConverter<std::string,SourceType>{
   public:
     std::string convert(SourceType& x){
       return std::to_string(x);
+    }
+  };
+
+  template <>
+  class EpicsRangeCheckingDataConverter<std::string,Void>{
+  public:
+    std::string convert(Void& x){
+      return std::string("void");
     }
   };
 
@@ -65,6 +86,14 @@ namespace ChimeraTK{
     DestType convert(std::string&){
       throw std::logic_error("Conversion from string is not allowed.");
 
+    }
+  };
+
+  template <>
+  class EpicsRangeCheckingDataConverter<Void, std::string>{
+  public:
+    Void convert(std::string&){
+      return Void();
     }
   };
 
@@ -217,7 +246,6 @@ namespace ChimeraTK{
     _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
   }
-
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   bool EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doWriteTransfer(VersionNumber /*versionNumber*/){
