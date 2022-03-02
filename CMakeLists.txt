@@ -13,26 +13,36 @@ include(cmake/set_default_flags.cmake)
 add_dependency(ChimeraTK-DeviceAccess 02.00 REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake4epics/cmake/Modules)
-find_package(EPICS COMPONENTS ca)
+
+include(FindPkgConfig)
+
+if(DEFINED EPICS_DIR)
+  set(ENV{PKG_CONFIG_PATH} $ENV{PKG_CONFIG_PATH}:${EPICS_DIR}/pkgconfig)
+endif()
+message("Using PKG_CONFIG_PATH=$ENV{PKG_CONFIG_PATH}")
+pkg_check_modules(EPICS REQUIRED epics-base-linux-x86_64)
+pkg_get_variable(EPICS_LIBS epics-base-linux-x86_64 EPICS_BASE_IOC_LIBS)
+
+#find_package(EPICS COMPONENTS ca REQUIRED)
 
 include_directories( include ${EPICS_INCLUDE_DIRS})
 
 aux_source_directory(${CMAKE_SOURCE_DIR}/src library_sources)
 
 add_library(${PROJECT_NAME} SHARED ${library_sources} )
-set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_LIBRARY_VERSION} SOVERSION ${${PROJECT_NAME}_SOVERSION})
+set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_LIBRARY_VERSION})
+set_target_properties(${PROJECT_NAME} PROPERTIES SOVERSION ${${PROJECT_NAME}_SOVERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_FLAGS "-Wl,--enable-new-dtags")
-set_target_properties( ${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
-# set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-ftemplate-backtrace-limit=0 ${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
-#set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-ftemplate-backtrace-limit=30 ${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
+set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
-target_link_libraries(${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES} ${ChimeraTK-ControlSystemAdapter_LIBRARIES} ${EPICS_LIBRARIES}) 
+target_link_libraries(${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES} ${EPICS_LIBS} ${EPICS_LDFLAGS})
 
 
 add_executable(testRead test/read.C)
-target_link_libraries(testRead ${EPICS_LIBRARIES})
+target_link_libraries(testRead ${EPICS_LIBS} ${EPICS_LDFLAGS})
+
 add_executable(testReadAsync test/readAsync.C)
-target_link_libraries(testReadAsync ${EPICS_LIBRARIES})
+target_link_libraries(testReadAsync ${EPICS_LIBS} ${EPICS_LDFLAGS})
 
 #Install the library and the executables
 install(TARGETS ${PROJECT_NAME}
