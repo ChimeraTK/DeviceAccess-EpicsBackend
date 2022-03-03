@@ -66,32 +66,22 @@ namespace ChimeraTK{
   boost::shared_ptr< NDRegisterAccessor<UserType> > EpicsBackend::getRegisterAccessor_impl(
       const RegisterPath &registerPathName, size_t numberOfWords, size_t wordOffsetInRegister, AccessModeFlags flags) {
     RegisterPath path = "EPICS://" + registerPathName;
-    EpicsBackendRegisterInfo* info = nullptr;
-    for(auto it = _catalogue_mutable.begin(), ite = _catalogue_mutable.end(); it != ite; it++){
-      if(it->getRegisterName() == registerPathName){
-        info = dynamic_cast<EpicsBackendRegisterInfo*>(&(*it));
-        break;
-      }
-    }
-    if(info == nullptr){
-      throw ChimeraTK::logic_error(std::string("Requested register (") + registerPathName + ") was not found in the catalog.");
-    }
 
-    if(numberOfWords + wordOffsetInRegister > info->_pv->nElems ||
-       (numberOfWords == 0 && wordOffsetInRegister > 0)){
+    EpicsBackendRegisterInfo info = _catalogue_mutable.getBackendRegister(registerPathName);
+
+    if(numberOfWords + wordOffsetInRegister > info._pv->nElems || (numberOfWords == 0 && wordOffsetInRegister > 0)) {
       std::stringstream ss;
-      ss << "Requested number of words/elements ( " << numberOfWords << ") with offset " + wordOffsetInRegister << " exceeds the number of available words/elements: " << info->_pv->nElems;
+      ss << "Requested number of words/elements ( " << numberOfWords << ") with offset " << wordOffsetInRegister
+         << " exceeds the number of available words/elements: " << info._pv->nElems;
       throw ChimeraTK::logic_error(ss.str());
     }
 
-    if(numberOfWords == 0)
-      numberOfWords = info->_pv->nElems;
+    if(numberOfWords == 0) numberOfWords = info._pv->nElems;
 
-    unsigned base_type = info->_pv->dbfType % (LAST_TYPE+1);
-    if(info->_pv->dbfType == DBR_STSACK_STRING || info->_pv->dbfType == DBR_CLASS_NAME)
-      base_type = DBR_STRING;
-    info->_pv->name = (char*)info->_caName.c_str();
-//    switch(info->_dpfType){
+    unsigned base_type = info._pv->dbfType % (LAST_TYPE + 1);
+    if(info._pv->dbfType == DBR_STSACK_STRING || info._pv->dbfType == DBR_CLASS_NAME) base_type = DBR_STRING;
+    info._pv->name = (char*)info._caName.c_str();
+    //    switch(info._dpfType){
     switch (base_type){
 //      case DBR_STRING:
 //        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
@@ -111,16 +101,16 @@ namespace ChimeraTK{
       case DBR_LONG:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, dbr_time_long, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
         break;
-//      case DBR_ENUM:
-//        if(dbr_type_is_CTRL(info->_dpfType))
-//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
-//        else if (dbr_type_is_GR(info->_dpfType))
-//          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
-//        else
-//          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
-//        break;
+        //      case DBR_ENUM:
+        //        if(dbr_type_is_CTRL(info._dpfType))
+        //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        //        else if (dbr_type_is_GR(info._dpfType))
+        //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        //        else
+        //          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        //        break;
       default:
-        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info->_pv->dbfType) + " not implemented.");
+        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info._pv->dbfType) + " not implemented.");
         break;
     }
 
@@ -139,44 +129,43 @@ namespace ChimeraTK{
   }
 
   void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName){
-    boost::shared_ptr<EpicsBackendRegisterInfo> info = boost::make_shared<EpicsBackendRegisterInfo>(path);
-    info->_pv.reset((pv*)calloc(1, sizeof(pv)));
-    info->_caName = std::string(*pvName.get());
-    info->_pv->name = (char*)info->_caName.c_str();
-    bool channelAlreadyCreated = ChannelManager::getInstance().channelPresent(info->_caName);
+    EpicsBackendRegisterInfo info(path);
+    info._pv.reset((pv*)calloc(1, sizeof(pv)));
+    info._caName = std::string(*pvName.get());
+    info._pv->name = (char*)info._caName.c_str();
+    bool channelAlreadyCreated = ChannelManager::getInstance().channelPresent(info._caName);
     if(!channelAlreadyCreated){
-      auto result = ca_create_channel(info->_pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info->_pv->chid);
-      ChannelManager::getInstance().addChannel(info->_pv->chid,info->_caName);
+      auto result = ca_create_channel(
+          info._pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info._pv->chid);
+      ChannelManager::getInstance().addChannel(info._pv->chid, info._caName);
       if(result != ECA_NORMAL){
-        std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info->_pv->name << std::endl;
+        std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info._pv->name
+                  << std::endl;
         return;
       }
     }
     _catalogue_mutable.addRegister(info);
   }
 
-  void EpicsBackend::configureChannel(EpicsBackendRegisterInfo *info){
-    info->_pv->nElems = ca_element_count(info->_pv->chid);
-    info->_pv->dbfType = ca_field_type(info->_pv->chid);
-    info->_pv->dbrType = dbf_type_to_DBR_TIME(info->_pv->dbfType);
+  void EpicsBackend::configureChannel(EpicsBackendRegisterInfo& info) {
+    info._pv->nElems = ca_element_count(info._pv->chid);
+    info._pv->dbfType = ca_field_type(info._pv->chid);
+    info._pv->dbrType = dbf_type_to_DBR_TIME(info._pv->dbfType);
 
-    if (ca_read_access(info->_pv->chid) != 1)
-      info->_isReadable = false;
-    if (ca_write_access(info->_pv->chid) != 1)
-      info->_isWritable = false;
+    if(ca_read_access(info._pv->chid) != 1) info._isReadable = false;
+    if(ca_write_access(info._pv->chid) != 1) info._isWritable = false;
 
-    if(info->_pv->dbfType == DBF_DOUBLE || info->_pv->dbfType == DBF_FLOAT){
-      info->_dataDescriptor = RegisterInfo::DataDescriptor( ChimeraTK::RegisterInfo::FundamentalType::numeric,
-                              false, true, 320, 300 );
-    } else if (info->_pv->dbfType == DBF_INT ||
-        info->_pv->dbfType == DBF_LONG ||
-        info->_pv->dbfType == DBF_SHORT){
-      info->_dataDescriptor = RegisterInfo::DataDescriptor( ChimeraTK::RegisterInfo::FundamentalType::numeric,
-                        true, true, 320, 300 );
-    } else {
-      std::cerr << "Failed to determine data type for node: " << info->_pv->name << " -> entry is not added to the catalogue." << std::endl;
+    if(info._pv->dbfType == DBF_DOUBLE || info._pv->dbfType == DBF_FLOAT) {
+      info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, false, true, 320, 300);
     }
-    info->_accessModes.add(AccessMode::wait_for_new_data);
+    else if(info._pv->dbfType == DBF_INT || info._pv->dbfType == DBF_LONG || info._pv->dbfType == DBF_SHORT) {
+      info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, true, true, 320, 300);
+    }
+    else {
+      std::cerr << "Failed to determine data type for node: " << info._pv->name
+                << " -> entry is not added to the catalogue." << std::endl;
+    }
+    info._accessModes.add(AccessMode::wait_for_new_data);
   }
 
   void EpicsBackend::fillCatalogueFromMapFile(const std::string &mapfileName){
@@ -219,8 +208,8 @@ namespace ChimeraTK{
     while(!_isFunctional){
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    for(auto it = _catalogue_mutable.begin(), ite = _catalogue_mutable.end(); it != ite; it++){
-        configureChannel(dynamic_cast<EpicsBackendRegisterInfo*>(&(*it)));
+    for(auto& reg : _catalogue_mutable) {
+      configureChannel(reg);
     }
   }
 
