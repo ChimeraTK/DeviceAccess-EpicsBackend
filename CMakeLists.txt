@@ -52,14 +52,6 @@ install(TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-#all include files go into include/PROJECT_NAME
-#The exclusion of ${PROJECT_NAME} prevents the recursive installation of the files just being installed.
-#The original headers are in include/*.h, the installed ones in include/PROJECT_NAME/*.h.
-#install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include/${PROJECT_NAME}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN "${PROJECT_NAME}" EXCLUDE
-#)
-
 # we support our cmake EXPORTS as imported targets
 set(PROVIDES_EXPORTED_TARGETS 1)
 # we need the public dependencies so create_cmake_config_files can find them as implicit dependencies
