@@ -7,12 +7,10 @@ set(${PROJECT_NAME}_MINOR_VERSION 01)
 set(${PROJECT_NAME}_PATCH_VERSION 00)
 include(cmake/set_version_numbers.cmake)
 
-include(cmake/add_dependency.cmake)
 include(cmake/set_default_flags.cmake)
+include(cmake/set_default_build_to_release.cmake)
 
-add_dependency(ChimeraTK-DeviceAccess 03.00 REQUIRED)
-
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake4epics/cmake/Modules)
+find_package(ChimeraTK-DeviceAccess 03.00 REQUIRED)
 
 include(FindPkgConfig)
 
@@ -23,48 +21,48 @@ message("Using PKG_CONFIG_PATH=$ENV{PKG_CONFIG_PATH}")
 pkg_check_modules(EPICS REQUIRED epics-base-linux-x86_64)
 pkg_get_variable(EPICS_LIBS epics-base-linux-x86_64 EPICS_BASE_IOC_LIBS)
 
-#find_package(EPICS COMPONENTS ca REQUIRED)
-
+list( APPEND CMAKE_INSTALL_RPATH ${EPICS_LIBRARY_DIRS} )
 include_directories( include ${EPICS_INCLUDE_DIRS})
 
 aux_source_directory(${CMAKE_SOURCE_DIR}/src library_sources)
 
 add_library(${PROJECT_NAME} SHARED ${library_sources} )
-set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_LIBRARY_VERSION})
-set_target_properties(${PROJECT_NAME} PROPERTIES SOVERSION ${${PROJECT_NAME}_SOVERSION})
-set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_FLAGS "-Wl,--enable-new-dtags")
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${ChimeraTK-DeviceAccess_CXX_FLAGS}")
-target_link_libraries(${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES} ${EPICS_LIBS} ${EPICS_LDFLAGS})
+set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_LIBRARY_VERSION} SOVERSION ${${PROJECT_NAME}_SOVERSION})
+target_link_libraries(${PROJECT_NAME} PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
+                                      PRIVATE ${EPICS_LIBS} 
+                                      PRIVATE ${EPICS_LDFLAGS})
 
-
+# binary used during the developement of the backend - they require the EPICS example IOC to be running
 add_executable(testRead test/read.C)
 target_link_libraries(testRead ${EPICS_LIBS} ${EPICS_LDFLAGS})
 
+# binary used during the developement of the backend - they require the EPICS example IOC to be running
 add_executable(testReadAsync test/readAsync.C)
 target_link_libraries(testReadAsync ${EPICS_LIBS} ${EPICS_LDFLAGS})
 
-#Install the library and the executables
+# Enable documentation
+include(cmake/enable_doxygen_documentation.cmake)
+
+# Install the library and the executables
+# this defines architecture-dependent ${CMAKE_INSTALL_LIBDIR}
+include(GNUInstallDirs)
 install(TARGETS ${PROJECT_NAME}
-   RUNTIME DESTINATION bin
-   LIBRARY DESTINATION lib
+  EXPORT ${PROJECT_NAME}Targets
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 #all include files go into include/PROJECT_NAME
 #The exclusion of ${PROJECT_NAME} prevents the recursive installation of the files just being installed.
 #The original headers are in include/*.h, the installed ones in include/PROJECT_NAME/*.h.
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include/${PROJECT_NAME}
-   FILES_MATCHING PATTERN "*.h"
-   PATTERN "${PROJECT_NAME}" EXCLUDE
-)
+#install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include/${PROJECT_NAME}
+#   FILES_MATCHING PATTERN "*.h"
+#   PATTERN "${PROJECT_NAME}" EXCLUDE
+#)
 
-#Create the config files by filling the correct variables into the template (*.cmake.in).
-#All variables @VARIABLE@ are replaced with the current values, but they have to be set first....
-#Only the reference header is needed. The other variables are for dependencies of this library,
-#but there are none.
-set(${PROJECT_NAME}_INCLUDE_DIRS "${CMAKE_INSTALL_PREFIX}/include ${Boost_INCLUDE_DIRS}")
-set(${PROJECT_NAME}_LIBRARIES "${PROJECT_NAME} ${ChimeraTK-DeviceAccess_LIBRARIES}")
-set(${PROJECT_NAME}_LIBRARY_DIRS "${CMAKE_INSTALL_PREFIX}/lib ${ChimeraTK-DeviceAccess_LIBRARY_DIRS}")
-set(${PROJECT_NAME}_CPPFLAGS "${ChimeraTK-DeviceAccess_CXX_FLAGS}")
-set(${PROJECT_NAME}_LINKER_FLAGS "-Wl,-rpath=${CMAKE_INSTALL_PREFIX}/lib,--enable-new-dtags")
+# we support our cmake EXPORTS as imported targets
+set(PROVIDES_EXPORTED_TARGETS 1)
+# we need the public dependencies so create_cmake_config_files can find them as implicit dependencies
+list(APPEND ${PROJECT_NAME}_PUBLIC_DEPENDENCIES "ChimeraTK-DeviceAccess")
 include(${CMAKE_SOURCE_DIR}/cmake/create_cmake_config_files.cmake)  
+
