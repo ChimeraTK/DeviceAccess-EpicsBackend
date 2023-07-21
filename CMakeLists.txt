@@ -15,7 +15,7 @@ find_package(ChimeraTK-DeviceAccess 03.00 REQUIRED)
 include(FindPkgConfig)
 
 if(DEFINED EPICS_DIR)
-  set(ENV{PKG_CONFIG_PATH} $ENV{PKG_CONFIG_PATH}:${EPICS_DIR}/pkgconfig)
+  set(ENV{PKG_CONFIG_PATH} $ENV{PKG_CONFIG_PATH}:${EPICS_DIR}/base/lib/pkgconfig)
 endif()
 message("Using PKG_CONFIG_PATH=$ENV{PKG_CONFIG_PATH}")
 pkg_check_modules(EPICS REQUIRED epics-base-linux-x86_64)
