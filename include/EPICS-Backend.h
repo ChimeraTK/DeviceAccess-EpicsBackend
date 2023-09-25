@@ -8,14 +8,14 @@
 #ifndef INCLUDE_EPICS_BACKEND_H_
 #define INCLUDE_EPICS_BACKEND_H_
 
-#include <ChimeraTK/DeviceBackendImpl.h>
-#include <ChimeraTK/BackendRegisterCatalogue.h>
-
 #include "EPICS_types.h"
-#include <cadef.h>
 
-#include <string.h>
+#include <ChimeraTK/BackendRegisterCatalogue.h>
+#include <ChimeraTK/DeviceBackendImpl.h>
+
+#include <cadef.h>
 #include <memory>
+#include <string.h>
 
 namespace ChimeraTK {
 
@@ -66,17 +66,15 @@ namespace ChimeraTK {
     EpicsBackend(const std::string& mapfile = "");
 
     /**
-   * Return the catalog and if not filled yet fill it.
-   */
+     * Return the catalog and if not filled yet fill it.
+     */
     RegisterCatalogue getRegisterCatalogue() const override { return RegisterCatalogue(_catalogue_mutable.clone()); };
 
     void setException() override;
 
-    void open() override {
-      if(_isFunctional) _opened = true;
-    };
+    void open() override;
 
-    void close() override { _opened = false; };
+    void close() override;
 
     std::string readDeviceInfo() override {
       std::stringstream ss;
@@ -111,20 +109,25 @@ namespace ChimeraTK {
 
    private:
     /**
-   * Catalog is filled when device is opened. When working with LogicalNameMapping the
-   * Catalog is requested even if the device is not opened!
-   * Keep track if catalog is filled using this bool.
-   */
+     * Catalog is filled when device is opened. When working with LogicalNameMapping the
+     * Catalog is requested even if the device is not opened!
+     * Keep track if catalog is filled using this bool.
+     */
     bool _catalogue_filled;
 
     bool _isFunctional{false};
 
     double _caTimeout{1.0};
 
+    std::string _mapfile;
+
     void fillCatalogueFromMapFile(const std::string& mapfile);
 
     void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
 
+    /**
+     * \throw ChimeraTK::runtime_error if channel is disconnected
+     */
     void configureChannel(EpicsBackendRegisterInfo& info);
   };
 
