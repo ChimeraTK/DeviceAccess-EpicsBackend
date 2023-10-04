@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
 /*
  * EPICSSubscriptionManager.cc
  *
@@ -8,6 +10,11 @@
 #include "EPICSChannelManager.h"
 
 #include "EPICS-BackendRegisterAccessor.h"
+
+#include <chrono>
+#include <thread>
+
+using namespace std::chrono_literals;
 
 namespace ChimeraTK {
 
@@ -33,6 +40,7 @@ namespace ChimeraTK {
     auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
     if(args.op == CA_OP_CONN_UP) {
       std::cout << "Channel access established." << std::endl;
+      ChannelManager::getInstance().channelMap.at(args.chid)._connected = true;
       backend->setBackendState(true);
     }
     else if(args.op == CA_OP_CONN_DOWN) {
@@ -41,8 +49,9 @@ namespace ChimeraTK {
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       // check if channel is in map -> map might be already cleared.
       if(ChannelManager::getInstance().channelMap.count(args.chid)) {
-        auto channelInfo = ChannelManager::getInstance().channelMap.at(args.chid);
-        for(auto& ch : channelInfo._accessors) {
+        auto channelInfo = &ChannelManager::getInstance().channelMap.at(args.chid);
+        channelInfo->_connected = false;
+        for(auto& ch : channelInfo->_accessors) {
           try {
             throw ChimeraTK::runtime_error(std::string("Channel for PV ") +
                 ChannelManager::getInstance().channelMap.at(args.chid)._caName + " was disconnected.");
@@ -104,5 +113,33 @@ namespace ChimeraTK {
         }
       }
     }
+  }
+
+  void ChannelManager::cleanup() {
+    channelMap.clear();
+  }
+
+  bool ChannelManager::checkChannels() {
+    // no lock needed as it is only called in waitForConnections which holds the mapLock
+    for(auto& mapItem : channelMap) {
+      if(!mapItem.second._connected) return false;
+    }
+    return true;
+  }
+
+  void ChannelManager::waitForConnections(double timeout) {
+    std::lock_guard<std::mutex> lock(mapLock);
+    size_t max = (size_t)(timeout / 0.02);
+    for(size_t i = 0; i < max; i++) {
+      if(checkChannels()) return;
+      std::this_thread::sleep_for(20ms);
+    }
+
+    std::stringstream ss;
+    ss << "Failed to build channel access conection to the following channels:";
+    for(auto& mapItem : channelMap) {
+      if(!mapItem.second._connected) ss << "\n\t - " << mapItem.second._caName;
+    }
+    throw ChimeraTK::runtime_error(ss.str());
   }
 } // namespace ChimeraTK

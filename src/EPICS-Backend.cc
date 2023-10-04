@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
 /*
  * EPICS-Backend.cc
  *
@@ -17,7 +19,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <thread>
 #include <vector>
 typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
@@ -56,6 +57,7 @@ namespace ChimeraTK {
 
   EpicsBackend::~EpicsBackend() {
     _asyncReadActivated = false;
+    if(_opened) close();
     ChannelManager::getInstance().cleanup();
     if(_isFunctional) ca_context_destroy();
   }
@@ -64,12 +66,13 @@ namespace ChimeraTK {
     if(!_catalogue_filled) {
       fillCatalogueFromMapFile(_mapfile);
       _catalogue_filled = true;
+      _isFunctional = true;
     }
     if(!_isFunctional) {
-      // read all channels from the catalogue and throw in case a channel is disconnected
       for(auto& reg : _catalogue_mutable) {
-        configureChannel(reg);
+        openChannel(reg);
       }
+      ChannelManager::getInstance().waitForConnections(_caTimeout);
       _isFunctional = true;
     }
     _opened = true;
@@ -77,8 +80,11 @@ namespace ChimeraTK {
 
   void EpicsBackend::close() {
     _opened = false;
-    // set to false -> triggers re-reading of all channels on open
+    // set to false -> triggers re-opening of all channels on open
     _isFunctional = false;
+    for(auto& reg : _catalogue_mutable) {
+      ca_clear_channel(reg._pv->chid);
+    }
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
@@ -165,8 +171,13 @@ namespace ChimeraTK {
     info._pv.reset((pv*)calloc(1, sizeof(pv)));
     info._caName = std::string(*pvName.get());
     info._pv->name = (char*)info._caName.c_str();
+    _catalogue_mutable.addRegister(info);
+    openChannel(info);
+  }
+
+  void EpicsBackend::openChannel(const EpicsBackendRegisterInfo& info) {
     bool channelAlreadyCreated = ChannelManager::getInstance().channelPresent(info._caName);
-    if(!channelAlreadyCreated) {
+    if(!channelAlreadyCreated || info._pv->chid == nullptr) {
       auto result = ca_create_channel(
           info._pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info._pv->chid);
       ChannelManager::getInstance().addChannel(info._pv->chid, info._caName);
@@ -176,10 +187,16 @@ namespace ChimeraTK {
         return;
       }
     }
-    _catalogue_mutable.addRegister(info);
   }
 
   void EpicsBackend::configureChannel(EpicsBackendRegisterInfo& info) {
+    if(ca_state(info._pv->chid) != cs_conn) {
+      std::stringstream ss;
+      ss << "EPICS variable " << info._caName << " mapped to " << info.getRegisterName()
+         << " is diconnected -> entry is not added to the catalogue." << std::endl;
+      throw ChimeraTK::runtime_error(ss.str());
+    }
+
     info._pv->nElems = ca_element_count(info._pv->chid);
     auto result = ca_pend_io(_caTimeout);
     if(result == ECA_TIMEOUT) {
@@ -187,13 +204,6 @@ namespace ChimeraTK {
     }
     info._pv->dbfType = ca_field_type(info._pv->chid);
     info._pv->dbrType = dbf_type_to_DBR_TIME(info._pv->dbfType);
-
-    //    if(ca_state(info._pv->chid) != cs_conn) {
-    //      std::stringstream ss;
-    //      ss << "EPICS variable " << info._caName << " mapped to " << info.getRegisterName()
-    //         << " is diconnected -> entry is not added to the catalogue." << std::endl;
-    //      throw ChimeraTK::runtime_error(ss.str());
-    //    }
 
     if(ca_read_access(info._pv->chid) != 1) info._isReadable = false;
     if(ca_write_access(info._pv->chid) != 1) info._isWritable = false;
@@ -252,6 +262,8 @@ namespace ChimeraTK {
       ChimeraTK::runtime_error("Channel setup failed.");
       return;
     }
+
+    ChannelManager::getInstance().waitForConnections(_caTimeout);
   }
 
   void EpicsBackend::setException() {

@@ -1,13 +1,12 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
+#pragma once
 /*
  * EPICS-Backend.h
  *
  *  Created on: Jan 22, 2021
  *      Author: Klaus Zenker (HZDR)
  */
-
-#ifndef INCLUDE_EPICS_BACKEND_H_
-#define INCLUDE_EPICS_BACKEND_H_
-
 #include "EPICS_types.h"
 
 #include <ChimeraTK/BackendRegisterCatalogue.h>
@@ -123,6 +122,11 @@ namespace ChimeraTK {
 
     void fillCatalogueFromMapFile(const std::string& mapfile);
 
+    /**
+     * Open the Channel Access channel. Add channel to the CahnnelManager.
+     */
+    void openChannel(const EpicsBackendRegisterInfo& info);
+
     void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
 
     /**
@@ -132,5 +136,3 @@ namespace ChimeraTK {
   };
 
 } // namespace ChimeraTK
-
-#endif /* INCLUDE_EPICS_BACKEND_H_ */
