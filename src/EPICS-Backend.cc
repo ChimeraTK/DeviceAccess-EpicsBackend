@@ -168,7 +168,7 @@ namespace ChimeraTK {
 
   void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName) {
     EpicsBackendRegisterInfo info(path);
-    info._pv.reset((pv*)calloc(1, sizeof(pv)));
+    info._pv.reset(static_cast<pv*>(calloc(1, sizeof(pv))), free);
     info._caName = std::string(*pvName.get());
     info._pv->name = (char*)info._caName.c_str();
     _catalogue_mutable.addRegister(info);

@@ -7,7 +7,9 @@
  *  Created on: Jan 22, 2021
  *      Author: Klaus Zenker (HZDR)
  */
+
 #include "EPICS_types.h"
+#include "EPICSRegisterInfo.h"
 
 #include <ChimeraTK/BackendRegisterCatalogue.h>
 #include <ChimeraTK/DeviceBackendImpl.h>
@@ -17,41 +19,6 @@
 #include <string.h>
 
 namespace ChimeraTK {
-
-  struct EpicsBackendRegisterInfo : public BackendRegisterInfoBase {
-    EpicsBackendRegisterInfo(const RegisterPath& path) : _name(path){};
-    EpicsBackendRegisterInfo() = default;
-
-    RegisterPath getRegisterName() const override { return _name; }
-
-    std::string getRegisterPath() const { return _name; }
-
-    unsigned int getNumberOfElements() const override { return _pv->nElems; }
-
-    unsigned int getNumberOfChannels() const override { return 1; }
-
-    const DataDescriptor& getDataDescriptor() const override { return _dataDescriptor; }
-
-    bool isReadable() const override { return _isReadable; }
-
-    bool isWriteable() const override { return _isWritable; }
-
-    AccessModeFlags getSupportedAccessModes() const override { return _accessModes; }
-
-    std::unique_ptr<BackendRegisterInfoBase> clone() const override {
-      return std::unique_ptr<BackendRegisterInfoBase>(new EpicsBackendRegisterInfo(*this));
-    }
-
-    RegisterPath _name;
-    bool _isReadable{true}, _isWritable{true};
-    DataDescriptor _dataDescriptor;
-    AccessModeFlags _accessModes{};
-
-    //\ToDo: Use pointer to have name persistent
-    std::shared_ptr<pv> _pv;
-    // this is needed because the name inside _pv is just a pointer
-    std::string _caName;
-  };
 
   class EpicsBackend : public DeviceBackendImpl {
    public:
