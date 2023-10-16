@@ -58,6 +58,9 @@ namespace ChimeraTK {
   EpicsBackend::~EpicsBackend() {
     _asyncReadActivated = false;
     if(_opened) close();
+    for(auto& reg : _catalogue_mutable) {
+      ca_clear_channel(reg._pv->chid);
+    }
     ChannelManager::getInstance().cleanup();
     if(_isFunctional) ca_context_destroy();
   }
@@ -79,12 +82,14 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::close() {
+    /* Do not try to close the channel of CA
+     * Each Accessor sets up a channel access subscription based on the channel ID
+     * If it is closed here each accessor would need to set up again the subscription,
+     * which is done currently in the constructor of the Accessor.
+     */
     _opened = false;
     // set to false -> triggers re-opening of all channels on open
     _isFunctional = false;
-    for(auto& reg : _catalogue_mutable) {
-      ca_clear_channel(reg._pv->chid);
-    }
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
