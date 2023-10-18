@@ -5,19 +5,20 @@
  *      Author: Klaus Zenker (HZDR)
  */
 
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <thread>
-
 #include "EPICS-Backend.h"
+
 #include "EPICS-BackendRegisterAccessor.h"
+#include "EPICSChannelManager.h"
+
 #include <ChimeraTK/BackendFactory.h>
 #include <ChimeraTK/DeviceAccessVersion.h>
 
 #include <boost/tokenizer.hpp>
 
-#include "EPICSChannelManager.h"
+#include <fstream>
+#include <iostream>
+#include <thread>
+#include <vector>
 typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
 extern "C" {
@@ -83,8 +84,8 @@ namespace ChimeraTK {
     //    switch(info._dpfType){
     switch(base_type) {
         //      case DBR_STRING:
-        //        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
-        //        break;
+        //        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path,
+        //        shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister); break;
       case DBR_FLOAT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, dbr_time_float, UserType>>(
             path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
@@ -107,11 +108,14 @@ namespace ChimeraTK {
         break;
         //      case DBR_ENUM:
         //        if(dbr_type_is_CTRL(info._dpfType))
-        //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path,
+        //          shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
         //        else if (dbr_type_is_GR(info._dpfType))
-        //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_ctrl_enum, UserType>>(path,
+        //          shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
         //        else
-        //          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+        //          return boost::make_shared<EpicsBackendRegisterAccessor<int, UserType>>(path, shared_from_this(),
+        //          info, flags, numberOfWords, wordOffsetInRegister);
         //        break;
       default:
         throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info._pv->dbfType) + " not implemented.");
@@ -203,16 +207,24 @@ namespace ChimeraTK {
       mapfile.close();
     }
     else {
-      ChimeraTK::runtime_error(std::string("Failed reading mapfile: ") + mapfileName);
+      throw ChimeraTK::runtime_error(std::string("Failed reading mapfile: ") + mapfileName);
+    }
+
+    if(_catalogue_mutable.getNumberOfRegisters() == 0) {
+      throw ChimeraTK::runtime_error("No registers found in catalogue!");
     }
 
     auto result = ca_flush_io();
     if(result == ECA_TIMEOUT) {
-      ChimeraTK::runtime_error("Channel setup failed.");
-      return;
+      throw ChimeraTK::runtime_error("Channel setup failed.");
     }
-    while(!_isFunctional) {
+    size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+    for(size_t i = 0; i < n; i++) {
+      if(_isFunctional) break;
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if(!_isFunctional) {
+      throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
     }
     for(auto& reg : _catalogue_mutable) {
       configureChannel(reg);
@@ -220,7 +232,8 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::setException() {
-    //\ToDo: Why I have to check is functional here? If not setException is called constantly and which means _isFunctional will stay false even if reset in the state handler.
+    //\ToDo: Why I have to check is functional here? If not setException is called constantly and which means
+    //_isFunctional will stay false even if reset in the state handler.
     if(_isFunctional) {
       _isFunctional = false;
       _asyncReadActivated = false;

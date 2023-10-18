@@ -19,7 +19,10 @@ if(DEFINED EPICS_DIR)
 endif()
 message("Using PKG_CONFIG_PATH=$ENV{PKG_CONFIG_PATH}")
 pkg_check_modules(EPICS REQUIRED epics-base-linux-x86_64)
-pkg_get_variable(EPICS_LIBS epics-base-linux-x86_64 EPICS_BASE_IOC_LIBS)
+#pkg_get_variable(EPICS_LIBS epics-base-linux-x86_64 EPICS_BASE_IOC_LIBS)
+pkg_get_variable(EPICS_LIBS epics-base-linux-x86_64 EPICS_BASE_HOST_LIBS)
+pkg_get_variable(EPICS_ARCH epics-base-linux-x86_64 ARCH)
+pkg_get_variable(EPICS_PATH epics-base-linux-x86_64 FINAL_LOCATION)
 
 list( APPEND CMAKE_INSTALL_RPATH ${EPICS_LIBRARY_DIRS} )
 include_directories( include ${EPICS_INCLUDE_DIRS})
@@ -33,13 +36,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
                                       PRIVATE ${EPICS_LIBS} 
                                       PRIVATE ${EPICS_LDFLAGS})
 
-# binary used during the developement of the backend - they require the EPICS example IOC to be running
-add_executable(testRead test/read.C)
-target_link_libraries(testRead ${EPICS_LIBS} ${EPICS_LDFLAGS})
-
-# binary used during the developement of the backend - they require the EPICS example IOC to be running
-add_executable(testReadAsync test/readAsync.C)
-target_link_libraries(testReadAsync ${EPICS_LIBS} ${EPICS_LDFLAGS})
+add_subdirectory(test)
 
 # Enable documentation
 include(cmake/enable_doxygen_documentation.cmake)

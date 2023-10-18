@@ -1,0 +1,73 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
+#pragma once
+
+/*
+ * TestIOC.h
+ *
+ *  Created on: Oct 17, 2023
+ *      Author: Klaus Zenker (HZDR)
+ */
+#include <boost/process.hpp>
+
+#include <iostream>
+#include <sstream>
+#include <thread>
+namespace bp = ::boost::process;
+
+enum IOCState { On, Off };
+
+struct IOCHelper {
+  IOCHelper() {}
+  ~IOCHelper() { _child.terminate(); }
+
+  bp::child _child{};
+
+  void start() {
+    _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
+        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  };
+
+  void stop() { _child.terminate(); }
+
+  void setValue(std::string pv, const std::vector<std::string>& t, const size_t& length = 1) {
+    auto ret = bp::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caput", pv.c_str(), t.at(0));
+    //    std::stringstream ss;
+    //    ss << "@EPICS_PATH@/bin/@EPICS_ARCH@/caput " << pv.c_str() << " " << t.at(0).c_str();
+    //    std::cout << "Calling: " << ss.str().c_str() << std::endl;
+    //    auto ret = std::system(ss.str().c_str());
+    std::cout << "Return code is: " << ret << std::endl;
+    if(ret) {
+      throw std::runtime_error("Failed to set IOC PV value.");
+    }
+  }
+
+  std::string getValue(const std::string& pv) {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::string cmd("@EPICS_PATH@/bin/@EPICS_ARCH@/caget -t ");
+    cmd += pv;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    if(!pipe) {
+      throw std::runtime_error("popen() failed!");
+    }
+    while(fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+      result += buffer.data();
+    }
+    result.erase(std::remove(result.begin(), result.end(), '\n'), result.cend());
+    std::cout << "Read current value: " << result.c_str() << std::endl;
+    return result;
+  }
+
+  bool checkConnection(const IOCState& state = IOCState::On) {
+    int ret = std::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caget ctkTest:ao");
+    if(state == IOCState::On && ret == 0) {
+      return true;
+    }
+    else if(state == IOCState::Off && ret != 0) {
+      return true;
+    }
+    return false;
+  }
+};

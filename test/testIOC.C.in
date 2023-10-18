@@ -1,0 +1,28 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
+/*
+ * testIOC.C
+ *
+ *  Created on: Oct 17, 2023
+ *      Author: Klaus Zenker (HZDR)
+ */
+
+#include <boost/process.hpp>
+namespace bp = ::boost::process;
+
+#include <iostream>
+#include <sstream>
+#include <thread>
+
+int main() {
+  bp::child c("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
+      bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caget ctkTest:ao");
+  std::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caput ctkTest:ao 42");
+  int status_before = std::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caget ctkTest:ao");
+  c.terminate();
+  int status_after = std::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caget ctkTest:ao");
+  std::cout << "Status code success: " << status_before << "\t Status code failure: " << status_after << std::endl;
+  return 0;
+}
