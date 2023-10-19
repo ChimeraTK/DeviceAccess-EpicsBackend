@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
+#pragma once
 /*
  * EPICSSubscriptionManager.h
  *
@@ -5,84 +8,149 @@
  *      Author: Klaus Zenker (HZDR)
  */
 
-#pragma once
+#include "EPICSTypes.h"
+
+#include <ChimeraTK/Exception.h>
+
 #include <deque>
 #include <map>
-#include <string>
+#include <memory>
 #include <mutex>
+#include <sstream>
+#include <string>
 
-#include "EPICS_types.h"
+namespace ChimeraTK {
+  class EpicsBackendRegisterAccessorBase;
+  class ChannelManager;
 
-namespace ChimeraTK{
-class EpicsBackendRegisterAccessorBase;
-
-
-class ChannelManager{
-public:
-  static ChannelManager& getInstance();
-
-  /**
-   * Destructor called on SIGINT!
-   * So the map is cleared here.
-   */
-  ~ChannelManager();
-
-  /**
-   * Handler called once the Channel Accesss is closed or opened.
-   * It is to be registered with the Channel Access creation.
-   */
-  static void channelStateHandler(connection_handler_args args);
-
-  struct ChannelInfo{
+  struct ChannelInfo {
     std::deque<EpicsBackendRegisterAccessorBase*> _accessors;
-    std::string _caName;
+    bool _configured{false};
+    evid* _subscriptionId{nullptr}; ///< Id used for subscriptions
+    bool _asyncReadActivated{false};
+    //\ToDo: Use pointer to have name persistent
+    std::shared_ptr<pv> _pv;
 
-    ChannelInfo(std::string channelName):_caName(channelName){};
+    /**
+     * Constructor.
+     *
+     * \param channelName
+     * \throw ChimeraTK::runtime_error in case the channel access connection could not be set up.
+     */
+    ChannelInfo(std::string channelName);
 
     bool isChannelName(std::string channelName);
 
     bool operator==(const ChannelInfo& other);
-
   };
 
-  // Register a channel.
-  void addChannel(const chid &chidIn, const std::string name);
+  class ChannelManager {
+   public:
+    static ChannelManager& getInstance();
 
-  /*
-   *  Check if a channel is registered.
-   *  \param name The name of the registered channel access
-   */
-  bool channelPresent(const std::string name);
+    /**
+     * Destructor called on SIGINT!
+     * So the map is cleared here.
+     */
+    ~ChannelManager();
 
-  /**
-   * Add accessor that is connected to a certain access channel
-   * \param chid Channel ID
-   * \param accessor The accessor that is updated by changes from channel access
-   */
-  void addAccessor(const chid &chid, EpicsBackendRegisterAccessorBase* accessor);
+    /**
+     * Handler called once the Channel Accesss is closed or opened.
+     * It is to be registered with the Channel Access creation.
+     */
+    static void channelStateHandler(connection_handler_args args);
 
-  /**
-   * Remove accessor that is connected to a certain access channel
-   * \param chid Channel ID
-   * \param accessor The accessor that is updated by changes from channel access
-   */
-  void removeAccessor(const chid &chidIn, EpicsBackendRegisterAccessorBase* accessor);
+    /**
+     * Handler called once data is updated on a EPICS channel.
+     */
+    static void handleEvent(evargs args);
 
-  /**
-   * Push exception to all accessors that are registered
-   *
-   */
-  void setException(const std::string error);
+    /**
+     *  Register a channel.
+     *  \param name The EPICS channel access name.
+     */
+    void addChannel(const std::string name);
 
-  /**
-   * Reset the map content
-   */
-  void cleanup(){channelMap.clear();};
+    /**
+     *  Check if a channel is registered.
+     *  \param name The EPICS channel access name.
+     */
+    bool channelPresent(const std::string name);
 
-private:
+    /**
+     * Remove accessor that is connected to a certain access channel
+     * \param name The EPICS channel access name.
+     * \param accessor The accessor that is updated by changes from channel access
+     */
+    void removeAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
 
-  std::mutex mapLock;
+    /**
+     * Push exception to all accessors that are registered
+     *
+     */
+    void setException(const std::string error);
 
-  std::map<chid,ChannelInfo> channelMap;
-};
-}
+    /**
+     * Reset the map content
+     */
+    void cleanup() { channelMap.clear(); };
+
+    /**
+     * Find the entry in the map for a given chanId.
+     * \param chid The chanId of the PV.
+     * \return Iterator to the internal map.
+     * \throw ChimeraTK::runtime_error if chid is not found.
+     * \remark Lock the map if you intend to change the map!
+     */
+    std::map<std::string, ChannelInfo>::iterator findChid(const chanId& chid);
+
+    /**
+     * Check if channel access meta data is filled.
+     * This only happens once the channel access connection is established.
+     * See channelStateHandler.
+     *
+     * \param name The EPICS channel access name.
+     * @return True if channel is configured.
+     */
+    bool isChannelConfigured(const std::string& name);
+
+    /**
+     * Get pv pointer.
+     *
+     * \param name The EPICS channel access name.
+     * \return PV pointer
+     * \remark Lock the map if you intend to change the pv object!
+     */
+    std::shared_ptr<pv> getPV(const std::string& name);
+
+    /**
+     * Create channel access subscription.
+     *
+     * \param name The EPICS channel access name.
+     */
+    void activateChannel(const std::string& name);
+
+    /**
+     * Add accessor that is connected to a certain access channel.
+     *
+     * \param name The EPICS channel access name.
+     * \param accessor The accessor that is updated by changes from channel access
+     * \remark map should be locked by calling function!
+     */
+    void addAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
+
+    std::mutex mapLock;
+
+   private:
+    // map that connects the EPICS PV name to the ChannelInfo object
+    std::map<std::string, ChannelInfo> channelMap;
+
+    /**
+     * Read initial data and push it to the accessors.
+     *
+     * \param name The EPICS channel access name.
+     * \remark map should be locked by calling function!
+     */
+    void setInitialValue(const std::string& name);
+  };
+} // namespace ChimeraTK

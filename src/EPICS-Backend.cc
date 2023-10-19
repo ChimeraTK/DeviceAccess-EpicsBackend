@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
 /*
  * EPICS-Backend.cc
  *
@@ -7,7 +9,7 @@
 
 #include "EPICS-Backend.h"
 
-#include "EPICS-BackendRegisterAccessor.h"
+#include "EPICSBackendRegisterAccessor.h"
 #include "EPICSChannelManager.h"
 
 #include <ChimeraTK/BackendFactory.h>
@@ -69,18 +71,17 @@ namespace ChimeraTK {
 
     EpicsBackendRegisterInfo info = _catalogue_mutable.getBackendRegister(registerPathName);
 
-    if(numberOfWords + wordOffsetInRegister > info._pv->nElems || (numberOfWords == 0 && wordOffsetInRegister > 0)) {
+    if(numberOfWords + wordOffsetInRegister > info._nElements || (numberOfWords == 0 && wordOffsetInRegister > 0)) {
       std::stringstream ss;
       ss << "Requested number of words/elements ( " << numberOfWords << ") with offset " << wordOffsetInRegister
-         << " exceeds the number of available words/elements: " << info._pv->nElems;
+         << " exceeds the number of available words/elements: " << info._nElements;
       throw ChimeraTK::logic_error(ss.str());
     }
 
-    if(numberOfWords == 0) numberOfWords = info._pv->nElems;
+    if(numberOfWords == 0) numberOfWords = info._nElements;
 
-    unsigned base_type = info._pv->dbfType % (LAST_TYPE + 1);
-    if(info._pv->dbfType == DBR_STSACK_STRING || info._pv->dbfType == DBR_CLASS_NAME) base_type = DBR_STRING;
-    info._pv->name = (char*)info._caName.c_str();
+    unsigned base_type = info._dbfType % (LAST_TYPE + 1);
+    if(info._dbfType == DBR_STSACK_STRING || info._dbfType == DBR_CLASS_NAME) base_type = DBR_STRING;
     //    switch(info._dpfType){
     switch(base_type) {
         //      case DBR_STRING:
@@ -118,7 +119,7 @@ namespace ChimeraTK {
         //          info, flags, numberOfWords, wordOffsetInRegister);
         //        break;
       default:
-        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info._pv->dbfType) + " not implemented.");
+        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info._dbfType) + " not implemented.");
         break;
     }
   }
@@ -138,39 +139,37 @@ namespace ChimeraTK {
 
   void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName) {
     EpicsBackendRegisterInfo info(path);
-    info._pv.reset((pv*)calloc(1, sizeof(pv)));
-    info._caName = std::string(*pvName.get());
-    info._pv->name = (char*)info._caName.c_str();
-    bool channelAlreadyCreated = ChannelManager::getInstance().channelPresent(info._caName);
-    if(!channelAlreadyCreated) {
-      auto result = ca_create_channel(
-          info._pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info._pv->chid);
-      ChannelManager::getInstance().addChannel(info._pv->chid, info._caName);
-      if(result != ECA_NORMAL) {
-        std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info._pv->name
-                  << std::endl;
-        return;
-      }
+    try {
+      ChannelManager::getInstance().addChannel(*pvName.get());
     }
+    catch(ChimeraTK::runtime_error& e) {
+      std::cerr << e.what() << ". PV is not added to the catalog." << std::endl;
+      return;
+    }
+    info._caName = std::string(*pvName.get());
     _catalogue_mutable.addRegister(info);
   }
 
   void EpicsBackend::configureChannel(EpicsBackendRegisterInfo& info) {
-    info._pv->nElems = ca_element_count(info._pv->chid);
-    info._pv->dbfType = ca_field_type(info._pv->chid);
-    info._pv->dbrType = dbf_type_to_DBR_TIME(info._pv->dbfType);
+    if(!ChannelManager::getInstance().isChannelConfigured(info._caName)) {
+      throw ChimeraTK::runtime_error("Trying to read an unconfigured channel.");
+    }
+    auto pv = ChannelManager::getInstance().getPV(info._caName);
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    info._nElements = pv->nElems;
+    info._dbfType = pv->dbfType;
 
-    if(ca_read_access(info._pv->chid) != 1) info._isReadable = false;
-    if(ca_write_access(info._pv->chid) != 1) info._isWritable = false;
+    if(ca_read_access(pv->chid) != 1) info._isReadable = false;
+    if(ca_write_access(pv->chid) != 1) info._isWritable = false;
 
-    if(info._pv->dbfType == DBF_DOUBLE || info._pv->dbfType == DBF_FLOAT) {
+    if(pv->dbfType == DBF_DOUBLE || pv->dbfType == DBF_FLOAT) {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, false, true, 320, 300);
     }
-    else if(info._pv->dbfType == DBF_INT || info._pv->dbfType == DBF_LONG || info._pv->dbfType == DBF_SHORT) {
+    else if(pv->dbfType == DBF_INT || pv->dbfType == DBF_LONG || pv->dbfType == DBF_SHORT) {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, true, true, 320, 300);
     }
     else {
-      std::cerr << "Failed to determine data type for node: " << info._pv->name
+      std::cerr << "Failed to determine data type for node: " << info._caName
                 << " -> entry is not added to the catalogue." << std::endl;
     }
     info._accessModes.add(AccessMode::wait_for_new_data);
