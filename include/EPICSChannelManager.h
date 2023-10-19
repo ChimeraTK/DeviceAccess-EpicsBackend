@@ -30,6 +30,7 @@ namespace ChimeraTK {
     bool _asyncReadActivated{false};
     //\ToDo: Use pointer to have name persistent
     std::shared_ptr<pv> _pv;
+    std::string _caName;
 
     /**
      * Constructor.
@@ -72,12 +73,6 @@ namespace ChimeraTK {
     void addChannel(const std::string name);
 
     /**
-     *  Check if a channel is registered.
-     *  \param name The EPICS channel access name.
-     */
-    bool channelPresent(const std::string name);
-
-    /**
      * Remove accessor that is connected to a certain access channel
      * \param name The EPICS channel access name.
      * \param accessor The accessor that is updated by changes from channel access
@@ -94,15 +89,6 @@ namespace ChimeraTK {
      * Reset the map content
      */
     void cleanup() { channelMap.clear(); };
-
-    /**
-     * Find the entry in the map for a given chanId.
-     * \param chid The chanId of the PV.
-     * \return Iterator to the internal map.
-     * \throw ChimeraTK::runtime_error if chid is not found.
-     * \remark Lock the map if you intend to change the map!
-     */
-    std::map<std::string, ChannelInfo>::iterator findChid(const chanId& chid);
 
     /**
      * Check if channel access meta data is filled.
@@ -131,6 +117,11 @@ namespace ChimeraTK {
     void activateChannel(const std::string& name);
 
     /**
+     * Activate all registered channels.
+     */
+    void activateChannels();
+
+    /**
      * Add accessor that is connected to a certain access channel.
      *
      * \param name The EPICS channel access name.
@@ -146,11 +137,19 @@ namespace ChimeraTK {
     std::map<std::string, ChannelInfo> channelMap;
 
     /**
-     * Read initial data and push it to the accessors.
-     *
-     * \param name The EPICS channel access name.
-     * \remark map should be locked by calling function!
+     *  Check if a channel is registered.
+     *  \param name The EPICS channel access name.
+     *  \remark map should be locked by calling function!
      */
-    void setInitialValue(const std::string& name);
+    bool channelPresent(const std::string name);
+
+    /**
+     * Find the entry in the map for a given chanId.
+     * \param chid The chanId of the PV.
+     * \return Iterator to the internal map.
+     * \throw ChimeraTK::runtime_error if chid is not found.
+     * \remark Lock the map if you intend to change the map!
+     */
+    std::map<std::string, ChannelInfo>::iterator findChid(const chanId& chid);
   };
 } // namespace ChimeraTK

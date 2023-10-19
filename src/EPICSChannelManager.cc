@@ -17,22 +17,16 @@ namespace ChimeraTK {
 
   ChannelInfo::ChannelInfo(std::string channelName) {
     _pv.reset((pv*)calloc(1, sizeof(pv)));
-    _pv->name = (char*)channelName.c_str();
-    auto result =
-        ca_create_channel(_pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &_pv->chid);
-    if(result != ECA_NORMAL) {
-      std::stringstream ss;
-      ss << "CA error " << ca_message(result) << " occurred while trying to create channel " << _pv->name;
-      throw ChimeraTK::runtime_error(ss.str());
-    }
+    _caName = channelName;
+    _pv->name = (char*)_caName.c_str();
   };
 
   bool ChannelInfo::isChannelName(std::string channelName) {
-    return std::string(_pv->name).compare(channelName) == 0;
+    return _caName.compare(channelName) == 0;
   }
 
   bool ChannelInfo::operator==(const ChannelInfo& other) {
-    return std::string(other._pv->name).compare(std::string(_pv->name));
+    return other._caName.compare(_caName);
   }
 
   ChannelManager::~ChannelManager() {
@@ -57,14 +51,16 @@ namespace ChimeraTK {
       it->second._pv->nElems = ca_element_count(args.chid);
       it->second._pv->dbfType = ca_field_type(args.chid);
       it->second._pv->dbrType = dbf_type_to_DBR_TIME(it->second._pv->dbfType);
+      it->second._pv->value = calloc(1, dbr_size_n(it->second._pv->dbrType, it->second._pv->nElems));
       it->second._configured = true;
     }
     else if(args.op == CA_OP_CONN_DOWN) {
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
+      if(!backend->isOpen()) return;
       for(auto& ch : it->second._accessors) {
         try {
-          throw ChimeraTK::runtime_error(std::string("Channel for PV ") + it->second._pv->name + " was disconnected.");
+          throw ChimeraTK::runtime_error(std::string("Channel for PV ") + it->second._caName + " was disconnected.");
         }
         catch(...) {
           ch->_notifications.push_overwrite_exception(std::current_exception());
@@ -76,6 +72,7 @@ namespace ChimeraTK {
   void ChannelManager::handleEvent(evargs args) {
     auto base = reinterpret_cast<ChannelManager*>(args.usr);
     //      std::cout << "Handling update of ca " << base->_info._caName << std::endl;
+    std::lock_guard<std::mutex> lock(base->mapLock);
     if(base->findChid(args.chid)->second._asyncReadActivated) {
       for(auto& accessor : base->findChid(args.chid)->second._accessors) {
         accessor->_notifications.push_overwrite(args);
@@ -95,7 +92,7 @@ namespace ChimeraTK {
   std::shared_ptr<pv> ChannelManager::getPV(const std::string& name) {
     std::lock_guard<std::mutex> lock(mapLock);
     if(!channelPresent(name)) {
-      throw ChimeraTK::runtime_error("Tryed to get pv without having a map entry!");
+      throw ChimeraTK::runtime_error("Tried to get pv without having a map entry!");
     }
     return channelMap.find(name)->second._pv;
   }
@@ -108,7 +105,6 @@ namespace ChimeraTK {
   }
 
   bool ChannelManager::channelPresent(const std::string name) {
-    std::lock_guard<std::mutex> lock(mapLock);
     if(channelMap.count(name)) {
       return true;
     }
@@ -132,6 +128,10 @@ namespace ChimeraTK {
       throw ChimeraTK::runtime_error("Tryed to add an accessor without having a map entry!");
     }
     channelMap.find(name)->second._accessors.push_back(accessor);
+    if(channelMap.find(name)->second._accessors.size() > 1) {
+      accessor->setInitialValue(channelMap.find(name)->second._pv->value, channelMap.find(name)->second._pv->dbrType,
+          channelMap.find(name)->second._pv->nElems);
+    }
   }
 
   void ChannelManager::removeAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor) {
@@ -157,18 +157,37 @@ namespace ChimeraTK {
     auto pv = getPV(name);
     // take lock here, because getPV also uses the lock
     std::lock_guard<std::mutex> lock(mapLock);
+    if(channelMap.find(name)->second._asyncReadActivated) return;
+    // only open subscription if accessors are present -> else the initial value will be lost
+    // The handler will be called directly after creating the subscription
+    // E.g. in case of QtHardmon EpicsBackend::activateAsyncRead is called first and accessors are added later
+    if(channelMap.find(name)->second._accessors.size() == 0) return;
     channelMap.find(name)->second._subscriptionId = new evid();
-    ca_create_subscription(pv->dbrType, pv->nElems, pv->chid, DBE_VALUE, &ChannelManager::handleEvent,
+    auto ret = ca_create_subscription(pv->dbrType, pv->nElems, pv->chid, DBE_VALUE, &ChannelManager::handleEvent,
         static_cast<ChannelManager*>(this), channelMap.find(name)->second._subscriptionId);
+    if(ret != ECA_NORMAL) {
+      throw ChimeraTK::runtime_error(std::string("Failed to create subscription for channel: ") + pv->name);
+    }
     ca_flush_io();
     channelMap.find(name)->second._asyncReadActivated = true;
-    setInitialValue(name);
   }
 
-  void ChannelManager::setInitialValue(const std::string& name) {
-    //\ToDo: Here we read the same value multiple times (for each accessor) -> Read only once
-    for(auto& accessor : channelMap.find(name)->second._accessors) {
-      accessor->updateData();
+  void ChannelManager::activateChannels() {
+    std::lock_guard<std::mutex> lock(mapLock);
+    for(auto& ch : channelMap) {
+      if(ch.second._asyncReadActivated) continue;
+      // only open subscription if accessors are present -> else the initial value will be lost
+      // The handler will be called directly after creating the subscription
+      // E.g. in case of QtHardmon EpicsBackend::activateAsyncRead is called first and accessors are added later
+      if(ch.second._accessors.size() == 0) continue;
+      ch.second._subscriptionId = new evid();
+      auto ret = ca_create_subscription(ch.second._pv->dbrType, ch.second._pv->nElems, ch.second._pv->chid, DBE_VALUE,
+          &ChannelManager::handleEvent, static_cast<ChannelManager*>(this), ch.second._subscriptionId);
+      if(ret != ECA_NORMAL) {
+        throw ChimeraTK::runtime_error(std::string("Failed to create subscription for channel: ") + ch.second._caName);
+      }
+      ca_flush_io();
+      ch.second._asyncReadActivated = true;
     }
   }
 

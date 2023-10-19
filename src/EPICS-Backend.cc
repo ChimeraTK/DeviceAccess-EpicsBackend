@@ -17,6 +17,7 @@
 
 #include <boost/tokenizer.hpp>
 
+#include <cadef.h>
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -55,12 +56,20 @@ namespace ChimeraTK {
 
   EpicsBackend::~EpicsBackend() {
     _asyncReadActivated = false;
-    ChannelManager::getInstance().cleanup();
+    _opened = false;
     if(_isFunctional) ca_context_destroy();
+    // wait until connection is closed
+    size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+    for(size_t i = 0; i < n; i++) {
+      if(!_isFunctional) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    ChannelManager::getInstance().cleanup();
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
     if(!_opened || !_isFunctional) return;
+    ChannelManager::getInstance().activateChannels();
     _asyncReadActivated = true;
   }
 
@@ -139,23 +148,31 @@ namespace ChimeraTK {
 
   void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName) {
     EpicsBackendRegisterInfo info(path);
+    info._caName = std::string(*pvName.get());
     try {
-      ChannelManager::getInstance().addChannel(*pvName.get());
+      ChannelManager::getInstance().addChannel(info._caName);
+      auto pv = ChannelManager::getInstance().getPV(info._caName);
+      auto result = ca_create_channel(
+          info._caName.c_str(), ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &pv->chid);
+      if(result != ECA_NORMAL) {
+        std::stringstream ss;
+        ss << "CA error " << ca_message(result) << " occurred while trying to create channel " << pv->name;
+        throw ChimeraTK::runtime_error(ss.str());
+      }
     }
     catch(ChimeraTK::runtime_error& e) {
       std::cerr << e.what() << ". PV is not added to the catalog." << std::endl;
       return;
     }
-    info._caName = std::string(*pvName.get());
     _catalogue_mutable.addRegister(info);
   }
 
   void EpicsBackend::configureChannel(EpicsBackendRegisterInfo& info) {
+    auto pv = ChannelManager::getInstance().getPV(info._caName);
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     if(!ChannelManager::getInstance().isChannelConfigured(info._caName)) {
       throw ChimeraTK::runtime_error("Trying to read an unconfigured channel.");
     }
-    auto pv = ChannelManager::getInstance().getPV(info._caName);
-    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     info._nElements = pv->nElems;
     info._dbfType = pv->dbfType;
 
