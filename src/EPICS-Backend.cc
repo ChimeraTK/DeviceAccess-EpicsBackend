@@ -56,6 +56,7 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::prepareChannelAccess() {
+    std::cout << "Preparing channel access." << std::endl;
     auto result = ca_context_create(ca_enable_preemptive_callback);
     if(result != ECA_NORMAL) {
       std::stringstream ss;
@@ -95,11 +96,56 @@ namespace ChimeraTK {
       }
       _opened = true;
     }
+    if(_isFunctional) {
+      size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+      for(size_t i = 0; i < n; i++) {
+        {
+          std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+          if(ChannelManager::getInstance().checkAllConnected()) {
+            _isFunctional = true;
+            break;
+          }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      if(!_isFunctional) {
+        throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
+      }
+    }
+    /*
+if(ChannelManager::getInstance()._connectionLost) {
+  ChannelManager::getInstance().deactivateChannels();
+  if(_isFunctional) ca_context_destroy();
+  ca_flush_io();
+  prepareChannelAccess();
+  {
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    ChannelManager::getInstance().addChannelsFromMap(this);
+  }
+  // channel was closed, because connection is lost
+  size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+  for(size_t i = 0; i < n; i++) {
+    {
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+      if(ChannelManager::getInstance().checkAllConnected()) {
+        _isFunctional = true;
+        break;
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  if(!_isFunctional) {
+    throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
+  }
+  ChannelManager::getInstance()._connectionLost = false;
+}*/
   }
 
   void EpicsBackend::close() {
     _opened = false;
+    _asyncReadActivated = false;
     ChannelManager::getInstance().deactivateChannels();
+    ChannelManager::getInstance().resetConnectionState();
     if(_isFunctional) ca_context_destroy();
     // wait until connection is closed
     size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up

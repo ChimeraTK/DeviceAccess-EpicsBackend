@@ -41,13 +41,13 @@ namespace ChimeraTK {
 
   void ChannelManager::channelStateHandler(connection_handler_args args) {
     auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
-    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    // channel should have been added to the manager - if not let throw here, because this should not happen
-    auto it = ChannelManager::getInstance().findChid(args.chid);
     if(args.op == CA_OP_CONN_UP) {
       std::cout << "Channel access established." << std::endl;
       backend->setBackendState(true);
-      it->second.connected = true;
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+      // channel should have been added to the manager - if not let throw here, because this should not happen
+      auto it = ChannelManager::getInstance().findChid(args.chid);
+      it->second._connected = true;
       // configure channel
       if(!it->second._configured) {
         it->second._pv->nElems = ca_element_count(args.chid);
@@ -60,8 +60,11 @@ namespace ChimeraTK {
     else if(args.op == CA_OP_CONN_DOWN) {
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
-      it->second.connected = false;
       if(!backend->isOpen()) return;
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+      // channel should have been added to the manager - if not let throw here, because this should not happen
+      auto it = ChannelManager::getInstance().findChid(args.chid);
+      it->second._connected = false;
       for(auto& ch : it->second._accessors) {
         if(!ch->_flags.has(AccessMode::wait_for_new_data)) {
           continue;
@@ -73,8 +76,7 @@ namespace ChimeraTK {
           ch->_notifications.push_overwrite_exception(std::current_exception());
         }
       }
-      //      lock.~lock_guard();
-      //      backend->close();
+      //      ChannelManager::getInstance()._connectionLost = true;
     }
   }
 
@@ -136,13 +138,13 @@ namespace ChimeraTK {
 
   bool ChannelManager::checkAllConnected() {
     for(auto& ch : channelMap) {
-      if(!ch.second.connected) return false;
+      if(!ch.second._connected) return false;
     }
     return true;
   }
   bool ChannelManager::isChannelConnected(const std::string name) {
     if(!channelPresent(name)) return false;
-    return channelMap.find(name)->second.connected;
+    return channelMap.find(name)->second._connected;
   }
 
   bool ChannelManager::channelPresent(const std::string name) {
@@ -239,6 +241,15 @@ namespace ChimeraTK {
       ch.second._asyncReadActivated = false;
     }
     ca_flush_io();
+  }
+
+  void ChannelManager::resetConnectionState() {
+    std::lock_guard<std::mutex> lock(mapLock);
+    for(auto& ch : channelMap) {
+      ch.second._accessors.clear();
+      ch.second._connected = false;
+      ch.second._configured = false;
+    }
   }
 
   void ChannelManager::setException(const std::string error) {

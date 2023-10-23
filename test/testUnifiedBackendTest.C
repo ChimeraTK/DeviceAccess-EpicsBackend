@@ -62,6 +62,7 @@ struct AllRegisterDefaults {
         else {
           // check if server is running is done by the method itself.
           IOCLauncher::helper->start();
+          std::cout << "IOC is started." << std::endl;
         }
         break;
       default:

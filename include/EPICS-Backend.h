@@ -14,6 +14,7 @@
 #include <ChimeraTK/BackendRegisterCatalogue.h>
 #include <ChimeraTK/DeviceBackendImpl.h>
 
+#include <atomic>
 #include <cadef.h>
 #include <memory>
 #include <string.h>
@@ -26,7 +27,7 @@ namespace ChimeraTK {
     static boost::shared_ptr<DeviceBackend> createInstance(
         std::string address, std::map<std::string, std::string> parameters);
     void setBackendState(bool isFunctional) { _isFunctional = isFunctional; }
-    bool _asyncReadActivated{false};
+    std::atomic<bool> _asyncReadActivated{false};
 
     bool isFunctional() const override { return _isFunctional; };
 

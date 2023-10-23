@@ -12,6 +12,7 @@
 
 #include <ChimeraTK/Exception.h>
 
+//#include <atomic>
 #include <deque>
 #include <map>
 #include <memory>
@@ -27,7 +28,7 @@ namespace ChimeraTK {
   struct ChannelInfo {
     std::deque<EpicsBackendRegisterAccessorBase*> _accessors;
     bool _configured{false};
-    bool connected{false};
+    bool _connected{false};
     evid* _subscriptionId{nullptr}; ///< Id used for subscriptions
     bool _asyncReadActivated{false};
     //\ToDo: Use pointer to have name persistent
@@ -153,9 +154,15 @@ namespace ChimeraTK {
     void activateChannels();
 
     /**
-     * Deactivate all registered channels.
+     * Deactivate subscription of all registered channels.
      */
     void deactivateChannels();
+
+    /**
+     * Reset configuration and connected state for all channels.
+     * Remove all accessors.
+     */
+    void resetConnectionState();
 
     /**
      * Add accessor that is connected to a certain access channel.
@@ -167,6 +174,7 @@ namespace ChimeraTK {
     void addAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
 
     std::mutex mapLock;
+    // std::atomic<bool> _connectionLost{false};
 
    private:
     // map that connects the EPICS PV name to the ChannelInfo object
