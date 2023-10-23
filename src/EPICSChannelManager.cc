@@ -47,18 +47,25 @@ namespace ChimeraTK {
     if(args.op == CA_OP_CONN_UP) {
       std::cout << "Channel access established." << std::endl;
       backend->setBackendState(true);
+      it->second.connected = true;
       // configure channel
-      it->second._pv->nElems = ca_element_count(args.chid);
-      it->second._pv->dbfType = ca_field_type(args.chid);
-      it->second._pv->dbrType = dbf_type_to_DBR_TIME(it->second._pv->dbfType);
-      it->second._pv->value = calloc(1, dbr_size_n(it->second._pv->dbrType, it->second._pv->nElems));
-      it->second._configured = true;
+      if(!it->second._configured) {
+        it->second._pv->nElems = ca_element_count(args.chid);
+        it->second._pv->dbfType = ca_field_type(args.chid);
+        it->second._pv->dbrType = dbf_type_to_DBR_TIME(it->second._pv->dbfType);
+        it->second._pv->value = calloc(1, dbr_size_n(it->second._pv->dbrType, it->second._pv->nElems));
+        it->second._configured = true;
+      }
     }
     else if(args.op == CA_OP_CONN_DOWN) {
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
+      it->second.connected = false;
       if(!backend->isOpen()) return;
       for(auto& ch : it->second._accessors) {
+        if(!ch->_flags.has(AccessMode::wait_for_new_data)) {
+          continue;
+        }
         try {
           throw ChimeraTK::runtime_error(std::string("Channel for PV ") + it->second._caName + " was disconnected.");
         }
@@ -66,16 +73,21 @@ namespace ChimeraTK {
           ch->_notifications.push_overwrite_exception(std::current_exception());
         }
       }
+      //      lock.~lock_guard();
+      //      backend->close();
     }
   }
 
   void ChannelManager::handleEvent(evargs args) {
     auto base = reinterpret_cast<ChannelManager*>(args.usr);
+    auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
     //      std::cout << "Handling update of ca " << base->_info._caName << std::endl;
     std::lock_guard<std::mutex> lock(base->mapLock);
-    if(base->findChid(args.chid)->second._asyncReadActivated) {
-      for(auto& accessor : base->findChid(args.chid)->second._accessors) {
-        accessor->_notifications.push_overwrite(args);
+    if(backend->isOpen() && backend->isFunctional()) {
+      if(base->findChid(args.chid)->second._asyncReadActivated) {
+        for(auto& accessor : base->findChid(args.chid)->second._accessors) {
+          accessor->_notifications.push_overwrite(args);
+        }
       }
     }
   }
@@ -90,18 +102,47 @@ namespace ChimeraTK {
   }
 
   std::shared_ptr<pv> ChannelManager::getPV(const std::string& name) {
-    std::lock_guard<std::mutex> lock(mapLock);
     if(!channelPresent(name)) {
       throw ChimeraTK::runtime_error("Tried to get pv without having a map entry!");
     }
     return channelMap.find(name)->second._pv;
   }
 
-  void ChannelManager::addChannel(const std::string name) {
-    std::lock_guard<std::mutex> lock(mapLock);
+  void ChannelManager::addChannel(const std::string name, EpicsBackend* backend) {
     if(!channelPresent(name)) {
       channelMap.insert(std::make_pair(name, ChannelInfo(name)));
     }
+    auto pv = getPV(name);
+    auto result =
+        ca_create_channel(name.c_str(), ChannelManager::channelStateHandler, backend, DEFAULT_CA_PRIORITY, &pv->chid);
+    if(result != ECA_NORMAL) {
+      std::stringstream ss;
+      ss << "CA error " << ca_message(result) << " occurred while trying to create channel " << name;
+      throw ChimeraTK::runtime_error(ss.str());
+    }
+  }
+
+  void ChannelManager::addChannelsFromMap(EpicsBackend* backend) {
+    for(auto& ch : channelMap) {
+      auto result = ca_create_channel(ch.second._caName.c_str(), ChannelManager::channelStateHandler, backend,
+          DEFAULT_CA_PRIORITY, &ch.second._pv->chid);
+      if(result != ECA_NORMAL) {
+        std::stringstream ss;
+        ss << "CA error " << ca_message(result) << " occurred while trying to create channel " << ch.second._caName;
+        throw ChimeraTK::runtime_error(ss.str());
+      }
+    }
+  }
+
+  bool ChannelManager::checkAllConnected() {
+    for(auto& ch : channelMap) {
+      if(!ch.second.connected) return false;
+    }
+    return true;
+  }
+  bool ChannelManager::isChannelConnected(const std::string name) {
+    if(!channelPresent(name)) return false;
+    return channelMap.find(name)->second.connected;
   }
 
   bool ChannelManager::channelPresent(const std::string name) {
@@ -154,9 +195,8 @@ namespace ChimeraTK {
   }
 
   void ChannelManager::activateChannel(const std::string& name) {
-    auto pv = getPV(name);
-    // take lock here, because getPV also uses the lock
     std::lock_guard<std::mutex> lock(mapLock);
+    auto pv = getPV(name);
     if(channelMap.find(name)->second._asyncReadActivated) return;
     // only open subscription if accessors are present -> else the initial value will be lost
     // The handler will be called directly after creating the subscription
@@ -189,6 +229,16 @@ namespace ChimeraTK {
       ca_flush_io();
       ch.second._asyncReadActivated = true;
     }
+  }
+
+  void ChannelManager::deactivateChannels() {
+    std::lock_guard<std::mutex> lock(mapLock);
+    for(auto& ch : channelMap) {
+      if(!ch.second._asyncReadActivated) continue;
+      ca_clear_subscription(*ch.second._subscriptionId);
+      ch.second._asyncReadActivated = false;
+    }
+    ca_flush_io();
   }
 
   void ChannelManager::setException(const std::string error) {

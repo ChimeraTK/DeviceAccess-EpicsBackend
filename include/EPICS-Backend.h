@@ -9,6 +9,7 @@
  */
 
 #include "EPICSRegisterInfo.h"
+#include "EPICSTypes.h"
 
 #include <ChimeraTK/BackendRegisterCatalogue.h>
 #include <ChimeraTK/DeviceBackendImpl.h>
@@ -16,7 +17,6 @@
 #include <cadef.h>
 #include <memory>
 #include <string.h>
-#include "EPICSTypes.h"
 
 namespace ChimeraTK {
 
@@ -28,7 +28,8 @@ namespace ChimeraTK {
     void setBackendState(bool isFunctional) { _isFunctional = isFunctional; }
     bool _asyncReadActivated{false};
 
-   protected:
+    bool isFunctional() const override { return _isFunctional; };
+
     EpicsBackend(const std::string& mapfile = "");
 
     /**
@@ -38,19 +39,15 @@ namespace ChimeraTK {
 
     void setException() override;
 
-    void open() override {
-      if(_isFunctional) _opened = true;
-    };
+    void open() override;
 
-    void close() override { _opened = false; };
+    void close() override;
 
     std::string readDeviceInfo() override {
       std::stringstream ss;
       ss << "EPICS Server";
       return ss.str();
     }
-
-    bool isFunctional() const override { return _isFunctional; };
 
     void activateAsyncRead() noexcept override;
 
@@ -92,6 +89,11 @@ namespace ChimeraTK {
     void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
 
     void configureChannel(EpicsBackendRegisterInfo& info);
+
+    /**
+     * Prepare channel access context.
+     */
+    void prepareChannelAccess();
   };
 
 } // namespace ChimeraTK

@@ -21,11 +21,13 @@
 
 namespace ChimeraTK {
   class EpicsBackendRegisterAccessorBase;
+  class EpicsBackend;
   class ChannelManager;
 
   struct ChannelInfo {
     std::deque<EpicsBackendRegisterAccessorBase*> _accessors;
     bool _configured{false};
+    bool connected{false};
     evid* _subscriptionId{nullptr}; ///< Id used for subscriptions
     bool _asyncReadActivated{false};
     //\ToDo: Use pointer to have name persistent
@@ -67,10 +69,39 @@ namespace ChimeraTK {
     static void handleEvent(evargs args);
 
     /**
-     *  Register a channel.
+     *  Add channel to the map and open channel access.
      *  \param name The EPICS channel access name.
+     *  \param backend The backend pointer to be passed to the CA channel.
+     *                 It is used to change the backend state and check if it is still open.
+     * \remark map should be locked by calling function!
      */
-    void addChannel(const std::string name);
+    void addChannel(const std::string name, EpicsBackend* backend);
+
+    /**
+     *  Register all channels in the map and open channel access.
+     *
+     *  \param backend The backend pointer to be passed to the CA channel.
+     *                 It is used to change the backend state and check if it is still open.
+     *
+     * \remark map should be locked by calling function!
+     */
+
+    void addChannelsFromMap(EpicsBackend* backend);
+
+    /**
+     * Check if all channels in the map are connected.
+     *
+     * \return True if all channels are connected.
+     */
+    bool checkAllConnected();
+
+    /**
+     * Check if channel is connected.
+     *
+     * \param name The EPICS channel access name.
+     * \return True if channel is connected.
+     */
+    bool isChannelConnected(const std::string name);
 
     /**
      * Remove accessor that is connected to a certain access channel
@@ -105,7 +136,7 @@ namespace ChimeraTK {
      *
      * \param name The EPICS channel access name.
      * \return PV pointer
-     * \remark Lock the map if you intend to change the pv object!
+     * \remark map should be locked by calling function!
      */
     std::shared_ptr<pv> getPV(const std::string& name);
 
@@ -120,6 +151,11 @@ namespace ChimeraTK {
      * Activate all registered channels.
      */
     void activateChannels();
+
+    /**
+     * Deactivate all registered channels.
+     */
+    void deactivateChannels();
 
     /**
      * Add accessor that is connected to a certain access channel.

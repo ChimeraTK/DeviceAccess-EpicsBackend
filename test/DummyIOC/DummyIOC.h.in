@@ -26,10 +26,13 @@ struct IOCHelper {
   void start() {
     _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
         bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"));
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   };
 
-  void stop() { _child.terminate(); }
+  void stop() {
+    _child.terminate();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
 
   void setValue(std::string pv, const std::vector<std::string>& t, const size_t& length = 1) {
     auto ret = bp::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caput", pv.c_str(), t.at(0));
