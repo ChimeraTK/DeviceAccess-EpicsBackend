@@ -1,13 +1,17 @@
 // SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
 // SPDX-License-Identifier: LGPL-3.0-or-later
+#include "EPICSTypes.h"
+
 #include <cadef.h>
+#include <chrono>
 #include <iostream>
 #include <string.h>
-
-#include "../include/EPICSTypes.h"
+#include <thread>
 static epicsTimeStamp tsStart;
 static int nConn = 0; /* Number of connected PVs */
 static int nRead = 0; /* Number of channels that were read */
+
+static bool ready = false;
 
 static void event_handler(evargs args) {
   pv* ppv = (pv*)args.usr;
@@ -25,6 +29,16 @@ static void event_handler(evargs args) {
   }
 }
 
+static void state_handler(connection_handler_args args) {
+  if(args.op == CA_OP_CONN_UP) {
+    std::cout << "Channel access established." << std::endl;
+    ready = true;
+  }
+  else if(args.op == CA_OP_CONN_DOWN) {
+    std::cout << "Channel access closed." << std::endl;
+  }
+}
+
 int main() {
   auto result = ca_context_create(ca_enable_preemptive_callback);
   if(result != ECA_NORMAL) {
@@ -35,10 +49,10 @@ int main() {
     return 1;
   }
   pv* mypv = (pv*)calloc(1, sizeof(pv));
-  std::string pvName("test:ai1");
+  std::string pvName("ctkTest:ao");
   mypv->name = (char*)pvName.c_str();
   epicsTimeGetCurrent(&tsStart);
-  result = ca_create_channel(mypv->name, 0, &mypv, DEFAULT_CA_PRIORITY, &mypv->chid);
+  result = ca_create_channel(mypv->name, &state_handler, &mypv, DEFAULT_CA_PRIORITY, &mypv->chid);
   if(result != ECA_NORMAL) {
     std::cerr << "CA error " << ca_message(result)
               << " occurred while trying "
@@ -55,6 +69,9 @@ int main() {
   if(result != ECA_NORMAL) {
     std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << mypv->name
               << std::endl;
+  }
+  while(!ready) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
   mypv->status = result;
 
