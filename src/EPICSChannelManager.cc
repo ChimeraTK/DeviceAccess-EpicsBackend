@@ -66,7 +66,7 @@ namespace ChimeraTK {
       auto it = ChannelManager::getInstance().findChid(args.chid);
       it->second._connected = false;
       for(auto& ch : it->second._accessors) {
-        if(!ch->_flags.has(AccessMode::wait_for_new_data)) {
+        if(!ch->_hasNotificationsQueue) {
           continue;
         }
         try {
@@ -88,7 +88,10 @@ namespace ChimeraTK {
     if(backend->isOpen() && backend->isFunctional()) {
       if(base->findChid(args.chid)->second._asyncReadActivated) {
         for(auto& accessor : base->findChid(args.chid)->second._accessors) {
-          accessor->_notifications.push_overwrite(args);
+          // channel can have accessors without mode wait_for_new_data -> no notification queue
+          if(accessor->_hasNotificationsQueue) {
+            accessor->_notifications.push_overwrite(args);
+          }
         }
       }
     }
@@ -172,8 +175,10 @@ namespace ChimeraTK {
     }
     channelMap.find(name)->second._accessors.push_back(accessor);
     if(channelMap.find(name)->second._accessors.size() > 1 && channelMap.find(name)->second._asyncReadActivated) {
-      accessor->setInitialValue(channelMap.find(name)->second._pv->value, channelMap.find(name)->second._pv->dbrType,
-          channelMap.find(name)->second._pv->nElems);
+      if(accessor->_hasNotificationsQueue) {
+        accessor->setInitialValue(channelMap.find(name)->second._pv->value, channelMap.find(name)->second._pv->dbrType,
+            channelMap.find(name)->second._pv->nElems);
+      }
     }
   }
 
@@ -260,7 +265,9 @@ namespace ChimeraTK {
           throw ChimeraTK::runtime_error(error);
         }
         catch(...) {
-          accessor->_notifications.push_exception(std::current_exception());
+          if(accessor->_hasNotificationsQueue) {
+            accessor->_notifications.push_exception(std::current_exception());
+          }
         }
       }
     }

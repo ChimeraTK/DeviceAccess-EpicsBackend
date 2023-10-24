@@ -104,7 +104,7 @@ namespace ChimeraTK {
     bool _isPartial{false};
     ChimeraTK::VersionNumber _currentVersion;
     bool _activeSubscription{false};
-    AccessModeFlags _flags;
+    bool _hasNotificationsQueue{false};
     /**
      * Push value to the notification queue. Used if subscription already exists and an additional accessor is added to
      * the ChannelManager.
@@ -175,11 +175,11 @@ namespace ChimeraTK {
     if(flags.has(AccessMode::raw)) throw ChimeraTK::logic_error("Raw access mode is not supported.");
     NDRegisterAccessor<CTKType>::buffer_2D.resize(1);
     this->accessChannel(0).resize(numberOfWords);
-    _flags = flags;
     {
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       auto pv = ChannelManager::getInstance().getPV(_info._caName);
       if(flags.has(AccessMode::wait_for_new_data)) {
+        _hasNotificationsQueue = true;
         _notifications = cppext::future_queue<evargs>(3);
         _readQueue = _notifications.then<void>(
             [this, pv](evargs& args) { memcpy(pv->value, args.dbr, dbr_size_n(args.type, args.count)); });
