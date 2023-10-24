@@ -56,7 +56,11 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::prepareChannelAccess() {
-    std::cout << "Preparing channel access." << std::endl;
+    // introduced to run the unit tests
+    // \ToDo: Why is that needed - each test finishes with closing the device which should destroy the context already
+    if(ca_current_context()) {
+      ca_context_destroy();
+    }
     auto result = ca_context_create(ca_enable_preemptive_callback);
     if(result != ECA_NORMAL) {
       std::stringstream ss;
