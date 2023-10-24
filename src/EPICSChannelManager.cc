@@ -171,7 +171,7 @@ namespace ChimeraTK {
       throw ChimeraTK::runtime_error("Tryed to add an accessor without having a map entry!");
     }
     channelMap.find(name)->second._accessors.push_back(accessor);
-    if(channelMap.find(name)->second._accessors.size() > 1) {
+    if(channelMap.find(name)->second._accessors.size() > 1 && channelMap.find(name)->second._asyncReadActivated) {
       accessor->setInitialValue(channelMap.find(name)->second._pv->value, channelMap.find(name)->second._pv->dbrType,
           channelMap.find(name)->second._pv->nElems);
     }
