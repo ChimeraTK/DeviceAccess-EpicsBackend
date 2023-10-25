@@ -53,7 +53,8 @@ namespace ChimeraTK {
         it->second._pv->nElems = ca_element_count(args.chid);
         it->second._pv->dbfType = ca_field_type(args.chid);
         it->second._pv->dbrType = dbf_type_to_DBR_TIME(it->second._pv->dbfType);
-        it->second._pv->value = calloc(1, dbr_size_n(it->second._pv->dbrType, it->second._pv->nElems));
+        it->second._pv->value =
+            calloc(it->second._pv->nElems, dbr_size_n(it->second._pv->dbrType, it->second._pv->nElems));
         it->second._configured = true;
       }
     }
@@ -90,7 +91,9 @@ namespace ChimeraTK {
         for(auto& accessor : base->findChid(args.chid)->second._accessors) {
           // channel can have accessors without mode wait_for_new_data -> no notification queue
           if(accessor->_hasNotificationsQueue) {
-            accessor->_notifications.push_overwrite(args);
+            std::cout << "Value in handle event: " << *(long*)dbr_value_ptr(args.dbr, args.type) << std::endl;
+            EpicsRawData data(args);
+            accessor->_notifications.push_overwrite(std::move(data));
           }
         }
       }

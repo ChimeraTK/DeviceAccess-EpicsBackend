@@ -18,13 +18,37 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
-#include <string>
+#include <string.h>
 
 namespace ChimeraTK {
   class EpicsBackendRegisterAccessorBase;
   class EpicsBackend;
   class ChannelManager;
 
+  /**
+   * Struct used in the future queue to transfer data received from EPICS to the accesors.
+   */
+  struct EpicsRawData {
+    void* data;
+    unsigned size;
+    EpicsRawData(const evargs& args) : size(dbr_size_n(args.type, args.count)) {
+      data = ::operator new(size);
+      memcpy(data, args.dbr, size);
+    }
+    EpicsRawData() : data(nullptr), size(0){};
+    EpicsRawData(EpicsRawData&& other) : data(std::exchange(other.data, nullptr)), size(other.size){};
+    EpicsRawData(const void* dataPtr, long type, long count) {
+      size = dbr_size_n(type, count);
+      data = ::operator new(size);
+      memcpy(data, dataPtr, size);
+    }
+    ~EpicsRawData() { ::operator delete(data); }
+  };
+
+  /**
+   * Struct used to store all information and data for each channel access connection.
+   * Also holds the pointers to all accessors linked to that channel.
+   */
   struct ChannelInfo {
     std::deque<EpicsBackendRegisterAccessorBase*> _accessors;
     bool _configured{false};

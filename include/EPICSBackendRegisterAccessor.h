@@ -97,7 +97,7 @@ namespace ChimeraTK {
         size_t numberOfWords, size_t wordOffsetInRegister)
     : _info(info), _backend(backend), _numberOfWords(numberOfWords), _offsetWords(wordOffsetInRegister) {}
     EpicsBackendRegisterInfo _info;
-    cppext::future_queue<evargs> _notifications;
+    cppext::future_queue<EpicsRawData> _notifications;
     boost::shared_ptr<EpicsBackend> _backend;
     size_t _numberOfWords; ///< Requested array length. Could be smaller than what is available on the server.
     size_t _offsetWords;   ///< Requested offset for arrays.
@@ -179,10 +179,9 @@ namespace ChimeraTK {
       auto pv = ChannelManager::getInstance().getPV(_info._caName);
       if(flags.has(AccessMode::wait_for_new_data)) {
         _hasNotificationsQueue = true;
-        _notifications = cppext::future_queue<evargs>(3);
+        _notifications = cppext::future_queue<EpicsRawData>(3);
         _readQueue = _notifications.then<void>(
-            [this, pv](evargs& args) { memcpy(pv->value, args.dbr, dbr_size_n(args.type, args.count)); },
-            std::launch::deferred);
+            [this, pv](EpicsRawData& data) { memcpy(pv->value, data.data, data.size); }, std::launch::deferred);
       }
       if(pv->nElems != numberOfWords) _isPartial = true;
       ChannelManager::getInstance().addAccessor(_info._caName, this);
@@ -196,11 +195,8 @@ namespace ChimeraTK {
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::setInitialValue(
       void* value, long type, long count) {
-    evargs args;
-    args.dbr = value;
-    args.type = type;
-    args.count = count;
-    _notifications.push_overwrite(args);
+    auto data = EpicsRawData(value, type, count);
+    _notifications.push_overwrite(std::move(data));
   }
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
