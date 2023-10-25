@@ -77,7 +77,6 @@ namespace ChimeraTK {
           ch->_notifications.push_overwrite_exception(std::current_exception());
         }
       }
-      //      ChannelManager::getInstance()._connectionLost = true;
     }
   }
 

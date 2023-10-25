@@ -198,7 +198,6 @@ namespace ChimeraTK {
     void addAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
 
     std::mutex mapLock;
-    // std::atomic<bool> _connectionLost{false};
 
    private:
     // map that connects the EPICS PV name to the ChannelInfo object
