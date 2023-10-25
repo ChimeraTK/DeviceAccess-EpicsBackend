@@ -13,12 +13,12 @@
 #include <ChimeraTK/Exception.h>
 
 //#include <atomic>
+#include <cstring> // memcpy
 #include <deque>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
-#include <string.h>
 
 namespace ChimeraTK {
   class EpicsBackendRegisterAccessorBase;

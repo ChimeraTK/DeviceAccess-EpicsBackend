@@ -20,8 +20,8 @@
 #include <boost/enable_shared_from_this.hpp>
 
 #include <cadef.h>
+#include <cstring> // memcpy
 #include <string>
-
 namespace ChimeraTK {
 
   template<typename DestType, typename SourceType>
