@@ -103,7 +103,6 @@ namespace ChimeraTK {
     size_t _offsetWords;   ///< Requested offset for arrays.
     bool _isPartial{false};
     ChimeraTK::VersionNumber _currentVersion;
-    bool _activeSubscription{false};
     bool _hasNotificationsQueue{false};
     /**
      * Push value to the notification queue. Used if subscription already exists and an additional accessor is added to
@@ -182,7 +181,8 @@ namespace ChimeraTK {
         _hasNotificationsQueue = true;
         _notifications = cppext::future_queue<evargs>(3);
         _readQueue = _notifications.then<void>(
-            [this, pv](evargs& args) { memcpy(pv->value, args.dbr, dbr_size_n(args.type, args.count)); });
+            [this, pv](evargs& args) { memcpy(pv->value, args.dbr, dbr_size_n(args.type, args.count)); },
+            std::launch::deferred);
       }
       if(pv->nElems != numberOfWords) _isPartial = true;
       ChannelManager::getInstance().addAccessor(_info._caName, this);
@@ -206,7 +206,7 @@ namespace ChimeraTK {
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously() {
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    if(!ChannelManager::getInstance().isChannelConnected(_info._caName)) {
+    if(!ChannelManager::getInstance().isChannelConnected(_info._caName) || !_backend->isFunctional()) {
       throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
     }
     auto pv = ChannelManager::getInstance().getPV(_info._caName);
@@ -259,7 +259,7 @@ namespace ChimeraTK {
   bool EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doWriteTransfer(
       VersionNumber /*versionNumber*/) {
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    if(!ChannelManager::getInstance().isChannelConnected(_info._caName)) {
+    if(!ChannelManager::getInstance().isChannelConnected(_info._caName) || !_backend->isFunctional()) {
       throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
     }
     if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
@@ -283,9 +283,7 @@ namespace ChimeraTK {
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::~EpicsBackendRegisterAccessor() {
-    if(_activeSubscription) {
-      ChannelManager::getInstance().removeAccessor(_info._caName, this);
-    }
+    ChannelManager::getInstance().removeAccessor(_info._caName, this);
   }
 
 } // namespace ChimeraTK

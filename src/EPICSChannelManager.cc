@@ -198,6 +198,12 @@ namespace ChimeraTK {
       if(!erased) {
         std::cout << "Failed to erase accessor for pv:" << name << std::endl;
       }
+      if(entry->_accessors.size() == 0) {
+        if(!entry->_asyncReadActivated) return;
+        ca_clear_subscription(*entry->_subscriptionId);
+        entry->_asyncReadActivated = false;
+        ca_flush_io();
+      }
     }
   }
 
