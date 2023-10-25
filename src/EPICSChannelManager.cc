@@ -84,14 +84,12 @@ namespace ChimeraTK {
   void ChannelManager::handleEvent(evargs args) {
     auto base = reinterpret_cast<ChannelManager*>(args.usr);
     auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
-    //      std::cout << "Handling update of ca " << base->_info._caName << std::endl;
     std::lock_guard<std::mutex> lock(base->mapLock);
     if(backend->isOpen() && backend->isFunctional()) {
       if(base->findChid(args.chid)->second._asyncReadActivated) {
         for(auto& accessor : base->findChid(args.chid)->second._accessors) {
           // channel can have accessors without mode wait_for_new_data -> no notification queue
           if(accessor->_hasNotificationsQueue) {
-            std::cout << "Value in handle event: " << *(long*)dbr_value_ptr(args.dbr, args.type) << std::endl;
             EpicsRawData data(args);
             accessor->_notifications.push_overwrite(std::move(data));
           }
