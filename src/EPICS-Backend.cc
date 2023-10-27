@@ -134,7 +134,7 @@ namespace ChimeraTK {
 
   void EpicsBackend::activateAsyncRead() noexcept {
     if(!_opened || !_isFunctional) return;
-    // activate async read excpects an initial value so deactiviate channels first to force initial value
+    // activate async read expects an initial value so deactivate channels first to force initial value
     ChannelManager::getInstance().deactivateChannels();
     ChannelManager::getInstance().activateChannels();
     _asyncReadActivated = true;
