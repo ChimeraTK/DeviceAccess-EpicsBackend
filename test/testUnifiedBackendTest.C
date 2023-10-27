@@ -9,6 +9,7 @@
 
 #include "DummyIOC.h"
 
+#include <cadef.h>
 #include <iostream>
 
 #define BOOST_TEST_MODULE testUnifiedBackendTest
@@ -24,6 +25,7 @@ class IOCLauncher {
   IOCLauncher() {
     helper = &_helper;
     _helper.start();
+    std::this_thread::sleep_for(std::chrono::seconds(2));
   }
   IOCHelper _helper;
   static IOCHelper* helper;
@@ -50,24 +52,27 @@ struct AllRegisterDefaults {
 
   void setForceRuntimeError(bool enable, size_t test) {
     switch(test) {
-      case 0:
+      case 1:
         if(enable) {
           IOCLauncher::helper->stop();
           // check if the server is really off
-          if(!IOCLauncher::helper->checkConnection(IOCState::Off)) {
-            throw std::runtime_error("Failed to force runtime error.");
-          }
-          std::cout << "IOC is stopped." << std::endl;
+          //          if(!IOCLauncher::helper->checkConnection(IOCState::Off)) {
+          //            throw std::runtime_error("Failed to force runtime error.");
+          //          }
         }
         else {
           // check if server is running is done by the method itself.
           IOCLauncher::helper->start();
-          std::cout << "IOC is started." << std::endl;
         }
+        break;
+      case 0:
+        IOCLauncher::helper->pause(enable);
         break;
       default:
         throw std::runtime_error("Unknown error case.");
     }
+
+    IOCLauncher::helper->checkState(enable == true ? CA_OP_CONN_DOWN : CA_OP_CONN_UP);
   }
 };
 

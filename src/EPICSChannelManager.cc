@@ -61,7 +61,10 @@ namespace ChimeraTK {
     else if(args.op == CA_OP_CONN_DOWN) {
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
-      if(!backend->isOpen()) return;
+      if(!backend->isOpen()) {
+        ChannelManager::getInstance().currentState = args.op;
+        return;
+      }
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       // channel should have been added to the manager - if not let throw here, because this should not happen
       auto it = ChannelManager::getInstance().findChid(args.chid);
@@ -78,6 +81,8 @@ namespace ChimeraTK {
         }
       }
     }
+    // set state -> it is used in the test to wait for a connect/reconnect
+    ChannelManager::getInstance().currentState = args.op;
   }
 
   void ChannelManager::handleEvent(evargs args) {
@@ -187,16 +192,18 @@ namespace ChimeraTK {
     // check if channel is in map -> map might be already cleared.
     if(channelMap.count(name)) {
       auto entry = &channelMap.at(name);
-      bool erased = false;
-      for(auto itaccessor = entry->_accessors.begin(); itaccessor != entry->_accessors.end(); ++itaccessor) {
-        if(accessor == *itaccessor) {
-          entry->_accessors.erase(itaccessor);
-          erased = true;
-          break;
+      if(entry->_accessors.size() > 0) {
+        bool erased = false;
+        for(auto itaccessor = entry->_accessors.begin(); itaccessor != entry->_accessors.end(); ++itaccessor) {
+          if(accessor == *itaccessor) {
+            entry->_accessors.erase(itaccessor);
+            erased = true;
+            break;
+          }
         }
-      }
-      if(!erased) {
-        std::cout << "Failed to erase accessor for pv:" << name << std::endl;
+        if(!erased) {
+          std::cout << "Failed to erase accessor for pv:" << name << std::endl;
+        }
       }
       if(entry->_accessors.size() == 0) {
         if(!entry->_asyncReadActivated) return;
@@ -257,9 +264,9 @@ namespace ChimeraTK {
   void ChannelManager::resetConnectionState() {
     std::lock_guard<std::mutex> lock(mapLock);
     for(auto& ch : channelMap) {
-      ch.second._accessors.clear();
+      //      ch.second._accessors.clear();
       ch.second._connected = false;
-      ch.second._configured = false;
+      //      ch.second._configured = false;
     }
   }
 

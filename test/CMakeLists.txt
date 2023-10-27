@@ -27,6 +27,15 @@ target_link_libraries(testRead ${EPICS_LIBS} ${EPICS_LDFLAGS})
 add_executable(testReadAsync readAsync.C ${CMAKE_CURRENT_BINARY_DIR}/IOC/bin)
 target_link_libraries(testReadAsync ${EPICS_LIBS} ${EPICS_LDFLAGS})
 
+# binary used during the developement of the backend
+add_executable(testPauseIOC testPauseIOC.C ${CMAKE_CURRENT_BINARY_DIR}/IOC/bin)
+set_target_properties(testPauseIOC PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(testPauseIOC PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
+                                             PRIVATE ${PROJECT_NAME}
+                                             PRIVATE ${EPICS_LIBS} 
+                                             PRIVATE ${EPICS_LDFLAGS})
+  
+
 configure_file(testIOC.C.in testIOC.C)
 configure_file(DummyIOC/DummyIOC.h.in DummyIOC.h)
 
@@ -35,7 +44,8 @@ target_link_libraries(testIOC pthread)
 
 FILE(COPY test.map DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 add_executable(testUnifiedBackendTest testUnifiedBackendTest.C)
-set_target_properties(testUnifiedBackendTest PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR} ${EPICS_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/include)
+#set_target_properties(testUnifiedBackendTest PROPERTIES INCLUDE_DIRECTORIES ${TT})
 target_link_libraries(testUnifiedBackendTest PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
                                              PRIVATE ${PROJECT_NAME}
                                              PRIVATE ${EPICS_LIBS} 

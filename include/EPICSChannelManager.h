@@ -12,7 +12,7 @@
 
 #include <ChimeraTK/Exception.h>
 
-//#include <atomic>
+#include <atomic>
 #include <cstring> // memcpy
 #include <deque>
 #include <map>
@@ -198,6 +198,7 @@ namespace ChimeraTK {
     void addAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
 
     std::mutex mapLock;
+    std::atomic<long> currentState; // state used in the tests to wait for a connect/reconnect
 
    private:
     // map that connects the EPICS PV name to the ChannelInfo object

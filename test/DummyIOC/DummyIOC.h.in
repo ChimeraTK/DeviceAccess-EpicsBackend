@@ -8,6 +8,8 @@
  *  Created on: Oct 17, 2023
  *      Author: Klaus Zenker (HZDR)
  */
+#include "EPICSChannelManager.h"
+
 #include <boost/process.hpp>
 
 #include <iostream>
@@ -22,33 +24,45 @@ struct IOCHelper {
   ~IOCHelper() { _child.terminate(); }
 
   bp::child _child{};
-
+  bp::opstream p;
   void start() {
+    bp::ipstream is;
+    p = bp::opstream();
+    //    _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
+    //        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"), bp::std_in<p, bp::std_out> is);
     _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
-        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"));
+        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"), bp::std_in < p,
+        bp::env["EPICS_CAS_BEACON_PERIOD"] = "0.1", bp::env["EPICS_CAS_INTF_ADDR_LIST"] = "149.220.79.114",
+        bp::env["EPICS_CAS_BEACON_ADDR_LIST"] = "149.220.79.114", bp::env["EPICS_CAS_AUTO_BEACON_ADDR_LIST"] = "NO");
     // We can not go faster - it takes some time to reconnect for the client!
     //    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    std::this_thread::sleep_for(std::chrono::seconds(10));
   };
 
-  void stop() {
-    _child.terminate();
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-  }
+  void stop() { _child.terminate(); }
 
-  void setValue(std::string pv, const std::vector<std::string>& t, const size_t& length = 1) {
-    auto ret = bp::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caput", pv.c_str(), t.at(0));
-    std::cout << "Return code is: " << ret << std::endl;
-    if(ret) {
-      throw std::runtime_error("Failed to set IOC PV value.");
+  void pause(const bool& doPause) {
+    if(doPause) {
+      p << "iocPause" << std::endl;
+    }
+    else {
+      p << "iocRun" << std::endl;
     }
   }
 
-  std::string getValue(const std::string& pv) {
+  void setValue(std::string pvName, const std::vector<std::string>& t, const size_t& length = 1) {
+    //    auto ret = bp::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caput", pvName.c_str(), t.at(0));
+    //    std::cout << "Return code is: " << ret << std::endl;
+    //    if(ret) {
+    //      throw std::runtime_error("Failed to set IOC PV value.");
+    //    }
+    p << "dbpf(\"" << pvName.c_str() << "\",\"" << t.at(0) << "\")" << std::endl;
+  }
+
+  std::string getValue(const std::string& pvName) {
     std::array<char, 128> buffer;
     std::string result;
     std::string cmd("@EPICS_PATH@/bin/@EPICS_ARCH@/caget -t ");
-    cmd += pv;
+    cmd += pvName;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
     if(!pipe) {
       throw std::runtime_error("popen() failed!");
@@ -70,5 +84,11 @@ struct IOCHelper {
       return true;
     }
     return false;
+  }
+
+  void checkState(long targetState) {
+    while(ChimeraTK::ChannelManager::getInstance().currentState != targetState) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
   }
 };
