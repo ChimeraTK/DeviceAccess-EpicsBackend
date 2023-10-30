@@ -55,7 +55,18 @@ struct IOCHelper {
     //    if(ret) {
     //      throw std::runtime_error("Failed to set IOC PV value.");
     //    }
-    p << "dbpf(\"" << pvName.c_str() << "\",\"" << t.at(0) << "\")" << std::endl;
+    if(length == 1) {
+      p << "dbpf(\"" << pvName.c_str() << "\",\"" << t.at(0) << "\")" << std::endl;
+    }
+    else {
+      p << "dbpf(\"" << pvName.c_str() << "\",\"[" << t.at(0);
+      if(length > 2) {
+        for(size_t i = 0; i < length - 2; i++) {
+          p << t.at(1 + i) << ",";
+        }
+      }
+      p << t.at(length - 1) << "]\")" << std::endl;
+    }
   }
 
   std::string getValue(const std::string& pvName) {
@@ -73,17 +84,6 @@ struct IOCHelper {
     result.erase(std::remove(result.begin(), result.end(), '\n'), result.cend());
     std::cout << "Read current value: " << result.c_str() << std::endl;
     return result;
-  }
-
-  bool checkConnection(const IOCState& state = IOCState::On) {
-    int ret = std::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caget ctkTest:ao");
-    if(state == IOCState::On && ret == 0) {
-      return true;
-    }
-    else if(state == IOCState::Off && ret != 0) {
-      return true;
-    }
-    return false;
   }
 
   void checkState(long targetState) {

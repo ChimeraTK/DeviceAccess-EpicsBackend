@@ -183,7 +183,10 @@ namespace ChimeraTK {
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, dbr_time_long, UserType>>(
             path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
         break;
-        //      case DBR_ENUM:
+      case DBR_ENUM:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_enum_t, dbr_time_enum, UserType>>(
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
+        break;
         //        if(dbr_type_is_CTRL(info._dpfType))
         //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path,
         //          shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
@@ -244,6 +247,9 @@ namespace ChimeraTK {
     }
     else if(pv->dbfType == DBF_INT || pv->dbfType == DBF_LONG || pv->dbfType == DBF_SHORT) {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, true, true, 320, 300);
+    }
+    else if(pv->dbfType == DBF_ENUM) {
+      info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::boolean, true, true, 320, 300);
     }
     else {
       std::cerr << "Failed to determine data type for node: " << info._caName

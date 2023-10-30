@@ -40,7 +40,7 @@ struct AllRegisterDefaults {
   AccessModeFlags supportedFlags() { return {AccessMode::wait_for_new_data}; }
   size_t nChannels() { return 1; }
   size_t writeQueueLength() { return std::numeric_limits<size_t>::max(); }
-  size_t nRuntimeErrorCases() { return 1; }
+  size_t nRuntimeErrorCases() { return 2; }
   typedef std::nullptr_t rawUserType;
   typedef int32_t minimumUserType;
 
@@ -52,7 +52,7 @@ struct AllRegisterDefaults {
 
   void setForceRuntimeError(bool enable, size_t test) {
     switch(test) {
-      case 1:
+      case 0:
         if(enable) {
           IOCLauncher::helper->stop();
           // check if the server is really off
@@ -65,7 +65,7 @@ struct AllRegisterDefaults {
           IOCLauncher::helper->start();
         }
         break;
-      case 0:
+      case 1:
         IOCLauncher::helper->pause(enable);
         break;
       default:
@@ -81,6 +81,7 @@ struct identity {
   typedef T type;
 };
 
+template<typename T>
 struct ScalarDefaults : AllRegisterDefaults {
   using AllRegisterDefaults::AllRegisterDefaults;
   size_t nElementsPerChannel() { return 1; }
@@ -130,16 +131,84 @@ struct ScalarDefaults : AllRegisterDefaults {
   }
 };
 
-struct RegSomeInt32 : ScalarDefaults {
-  std::string path() override { return "ctkTest"; }
+template<>
+struct ScalarDefaults<bool> : AllRegisterDefaults {
+  using AllRegisterDefaults::AllRegisterDefaults;
+  size_t nElementsPerChannel() { return 1; }
+  virtual std::string path() = 0;
+  virtual std::string pvName() = 0;
+
+  template<typename UserType>
+  std::vector<std::vector<UserType>> generateValue() {
+    return generateValue(identity<UserType>());
+  }
+
+  template<typename UserType>
+  std::vector<std::vector<UserType>> getRemoteValue() {
+    auto result = IOCLauncher::helper->getValue(pvName());
+    auto d = ChimeraTK::userTypeToUserType<UserType, std::string>(IOCLauncher::helper->getValue(pvName()));
+    std::stringstream ss;
+    ss << "Received remote value: " << result.c_str() << " which is converted to : "
+       << ChimeraTK::userTypeToUserType<UserType, std::string>(IOCLauncher::helper->getValue(pvName()))
+       << " and d is set to: " << d << std::endl;
+    std::cout << ss.str();
+    return {{d}};
+  }
+
+  void setRemoteValue() {
+    std::vector<std::string> value;
+    value.push_back(generateValue<std::string>().at(0).at(0));
+    std::stringstream ss;
+    ss << value.at(0);
+    std::cout << "Setting value: " << ss.str().c_str() << std::endl;
+    IOCLauncher::helper->setValue(pvName(), value);
+  }
+
+ private:
+  template<typename UserType>
+  std::vector<std::vector<UserType>> generateValue(identity<UserType>) {
+    UserType increment(1);
+    auto currentData = getRemoteValue<UserType>();
+    if(currentData.at(0).at(0) > 0) {
+      UserType data = currentData.at(0).at(0) - increment;
+      return {{data}};
+    }
+    else {
+      UserType data = currentData.at(0).at(0) + increment;
+      return {{data}};
+    }
+  }
+
+  std::vector<std::vector<std::string>> generateValue(identity<std::string>) {
+    auto currentData = getRemoteValue<int>();
+    std::string data;
+    if(currentData.at(0).at(0) > 0) {
+      data = "0";
+    }
+    else {
+      data = "1";
+    }
+    return {{data}};
+  }
+};
+
+struct RegAo : ScalarDefaults<int32_t> {
+  std::string path() override { return "ctkTest/ao"; }
   std::string pvName() override { return std::string("ctkTest:ao"); }
   typedef int32_t minimumUserType;
+};
+
+struct RegBo : ScalarDefaults<bool> {
+  std::string path() override { return "ctkTest/boInt"; }
+  std::string pvName() override { return std::string("ctkTest:boInt"); }
+  typedef Boolean minimumUserType;
 };
 
 // use test fixture suite to have access to the fixture class members
 BOOST_FIXTURE_TEST_SUITE(s, IOCLauncher)
 BOOST_AUTO_TEST_CASE(unifiedBackendTest) {
-  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegSomeInt32>();
+  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegAo>().addRegister<RegSomeBool>();
+  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBo>();
   ubt.runTests("(epics:?map=test.map)");
 }
 

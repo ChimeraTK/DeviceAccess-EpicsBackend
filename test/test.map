@@ -1,1 +1,2 @@
-ctkTest ctkTest:ao
+ctkTest/ao ctkTest:ao
+ctkTest/boInt ctkTest:boInt
