@@ -207,8 +207,8 @@ struct RegBo : ScalarDefaults<bool> {
 // use test fixture suite to have access to the fixture class members
 BOOST_FIXTURE_TEST_SUITE(s, IOCLauncher)
 BOOST_AUTO_TEST_CASE(unifiedBackendTest) {
-  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegAo>().addRegister<RegSomeBool>();
-  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBo>();
+  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegAo>().addRegister<RegBo>();
+  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBo>();
   ubt.runTests("(epics:?map=test.map)");
 }
 

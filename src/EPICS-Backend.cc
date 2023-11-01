@@ -85,7 +85,7 @@ namespace ChimeraTK {
       for(size_t i = 0; i < n; i++) {
         {
           std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-          if(ChannelManager::getInstance().checkAllConnected()) {
+          if(ChannelManager::getInstance().checkAllConnections(true)) {
             _isFunctional = true;
             break;
           }
@@ -105,7 +105,7 @@ namespace ChimeraTK {
       for(size_t i = 0; i < n; i++) {
         {
           std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-          if(ChannelManager::getInstance().checkAllConnected()) {
+          if(ChannelManager::getInstance().checkAllConnections(true)) {
             _isFunctional = true;
             break;
           }
@@ -133,7 +133,7 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
-    if(!_opened || !_isFunctional) return;
+    if(_asyncReadActivated || !_opened || !_isFunctional) return;
     // activate async read expects an initial value so deactivate channels first to force initial value
     ChannelManager::getInstance().deactivateChannels();
     ChannelManager::getInstance().activateChannels();
@@ -304,7 +304,7 @@ namespace ChimeraTK {
     for(size_t i = 0; i < n; i++) {
       {
         std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-        if(ChannelManager::getInstance().checkAllConnected()) {
+        if(ChannelManager::getInstance().checkAllConnections(true)) {
           _isFunctional = true;
           break;
         }

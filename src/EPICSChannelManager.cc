@@ -82,7 +82,20 @@ namespace ChimeraTK {
       }
     }
     // set state -> it is used in the test to wait for a connect/reconnect
-    ChannelManager::getInstance().currentState = args.op;
+    // ToDo:use ifdef to enable only in tests
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    if(args.op == CA_OP_CONN_UP) {
+      if(ChannelManager::getInstance().checkAllConnections(true)) {
+        // only set connected once all are up
+        ChannelManager::getInstance().currentState = args.op;
+      }
+    }
+    else {
+      if(ChannelManager::getInstance().checkAllConnections(false)) {
+        // only set connected once all are down and exceptions have been pushed
+        ChannelManager::getInstance().currentState = args.op;
+      }
+    }
   }
 
   void ChannelManager::handleEvent(evargs args) {
@@ -144,9 +157,18 @@ namespace ChimeraTK {
     }
   }
 
-  bool ChannelManager::checkAllConnected() {
-    for(auto& ch : channelMap) {
-      if(!ch.second._connected) return false;
+  bool ChannelManager::checkAllConnections(const bool& connected) {
+    if(connected) {
+      // check if all are connected
+      for(auto& ch : channelMap) {
+        if(!ch.second._connected) return false;
+      }
+    }
+    else {
+      // check if all are disconnected
+      for(auto& ch : channelMap) {
+        if(ch.second._connected) return false;
+      }
     }
     return true;
   }

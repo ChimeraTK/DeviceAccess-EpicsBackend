@@ -115,10 +115,11 @@ namespace ChimeraTK {
 
     /**
      * Check if all channels in the map are connected.
+     *  \param connected If true the check checks if all are connected. Else it checks if all are disconnected.
      *
      * \return True if all channels are connected.
      */
-    bool checkAllConnected();
+    bool checkAllConnections(const bool& connected);
 
     /**
      * Check if channel is connected.
