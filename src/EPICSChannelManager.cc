@@ -69,15 +69,15 @@ namespace ChimeraTK {
       // channel should have been added to the manager - if not let throw here, because this should not happen
       auto it = ChannelManager::getInstance().findChid(args.chid);
       it->second._connected = false;
-      for(auto& ch : it->second._accessors) {
-        if(!ch->_hasNotificationsQueue) {
+      for(auto& accessor : it->second._accessors) {
+        if(!accessor->_hasNotificationsQueue) {
           continue;
         }
         try {
           throw ChimeraTK::runtime_error(std::string("Channel for PV ") + it->second._caName + " was disconnected.");
         }
         catch(...) {
-          ch->_notifications.push_overwrite_exception(std::current_exception());
+          accessor->_notifications.push_overwrite_exception(std::current_exception());
         }
       }
     }
