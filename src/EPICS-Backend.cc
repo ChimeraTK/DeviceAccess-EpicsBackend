@@ -96,6 +96,7 @@ namespace ChimeraTK {
         throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
       }
       if(_asyncReadActivated) {
+        std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
         ChannelManager::getInstance().activateChannels();
       }
       _opened = true;
@@ -121,6 +122,7 @@ namespace ChimeraTK {
   void EpicsBackend::close() {
     _opened = false;
     _asyncReadActivated = false;
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     ChannelManager::getInstance().deactivateChannels();
     ChannelManager::getInstance().resetConnectionState();
     if(_isFunctional) ca_context_destroy();
@@ -133,10 +135,27 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
-    if(_asyncReadActivated || !_opened || !_isFunctional) return;
+    //    if(_asyncReadActivated || !_opened || !_isFunctional) return;
+    if(!_opened || !_isFunctional) return;
     // activate async read expects an initial value so deactivate channels first to force initial value
-    ChannelManager::getInstance().deactivateChannels();
-    ChannelManager::getInstance().activateChannels();
+    {
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+      ChannelManager::getInstance().deactivateChannels();
+      ChannelManager::getInstance().activateChannels();
+    }
+    size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+    bool allGood = false;
+    //    for(size_t i = 0; i < n; i++) {
+    while(true) {
+      if(ChannelManager::getInstance().checkInitialValueReceived()) {
+        allGood = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if(!allGood) {
+      throw ChimeraTK::runtime_error("Failded to receive initial value for all subscriptions in activateAsyncRead().");
+    }
     _asyncReadActivated = true;
   }
 

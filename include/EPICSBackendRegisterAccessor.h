@@ -174,18 +174,16 @@ namespace ChimeraTK {
     if(flags.has(AccessMode::raw)) throw ChimeraTK::logic_error("Raw access mode is not supported.");
     NDRegisterAccessor<CTKType>::buffer_2D.resize(1);
     this->accessChannel(0).resize(numberOfWords);
-    {
-      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-      auto pv = ChannelManager::getInstance().getPV(_info._caName);
-      if(flags.has(AccessMode::wait_for_new_data)) {
-        _hasNotificationsQueue = true;
-        _notifications = cppext::future_queue<EpicsRawData>(3);
-        _readQueue = _notifications.then<void>(
-            [this, pv](EpicsRawData& data) { memcpy(pv->value, data.data, data.size); }, std::launch::deferred);
-      }
-      if(pv->nElems != numberOfWords) _isPartial = true;
-      ChannelManager::getInstance().addAccessor(_info._caName, this);
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto pv = ChannelManager::getInstance().getPV(_info._caName);
+    if(flags.has(AccessMode::wait_for_new_data)) {
+      _hasNotificationsQueue = true;
+      _notifications = cppext::future_queue<EpicsRawData>(3);
+      _readQueue = _notifications.then<void>(
+          [this, pv](EpicsRawData& data) { memcpy(pv->value, data.data, data.size); }, std::launch::deferred);
     }
+    if(pv->nElems != numberOfWords) _isPartial = true;
+    ChannelManager::getInstance().addAccessor(_info._caName, this);
     if(flags.has(AccessMode::wait_for_new_data) && asyncReadActivated) {
       ChannelManager::getInstance().activateChannel(_info._caName);
     }

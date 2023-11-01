@@ -55,6 +55,7 @@ namespace ChimeraTK {
     bool _connected{false};
     evid* _subscriptionId{nullptr}; ///< Id used for subscriptions
     bool _asyncReadActivated{false};
+    bool _initialValueReceived{false};
     //\ToDo: Use pointer to have name persistent
     std::shared_ptr<pv> _pv;
     std::string _caName;
@@ -170,22 +171,37 @@ namespace ChimeraTK {
      * Create channel access subscription.
      *
      * \param name The EPICS channel access name.
+     *
+     * \remark map should be locked by calling function!
      */
     void activateChannel(const std::string& name);
 
     /**
      * Activate all registered channels.
+     *
+     * \remark map should be locked by calling function!
      */
     void activateChannels();
 
     /**
+     * Wait until all channels received its initial value.
+     *
+     * \return True if all channels with async read received an initial value.
+     */
+    bool checkInitialValueReceived();
+
+    /**
      * Deactivate subscription of all registered channels.
+     *
+     * \remark map should be locked by calling function!
      */
     void deactivateChannels();
 
     /**
      * Reset configuration and connected state for all channels.
      * Remove all accessors.
+     *
+     * \remark map should be locked by calling function!
      */
     void resetConnectionState();
 

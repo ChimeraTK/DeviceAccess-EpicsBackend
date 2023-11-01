@@ -69,6 +69,10 @@ namespace ChimeraTK {
       // channel should have been added to the manager - if not let throw here, because this should not happen
       auto it = ChannelManager::getInstance().findChid(args.chid);
       it->second._connected = false;
+      if(it->second._asyncReadActivated) {
+        ChannelManager::getInstance().deactivateChannels();
+      }
+
       for(auto& accessor : it->second._accessors) {
         if(!accessor->_hasNotificationsQueue) {
           continue;
@@ -109,6 +113,7 @@ namespace ChimeraTK {
           if(accessor->_hasNotificationsQueue) {
             EpicsRawData data(args);
             accessor->_notifications.push_overwrite(std::move(data));
+            base->findChid(args.chid)->second._initialValueReceived = true;
           }
         }
       }
@@ -237,7 +242,6 @@ namespace ChimeraTK {
   }
 
   void ChannelManager::activateChannel(const std::string& name) {
-    std::lock_guard<std::mutex> lock(mapLock);
     auto pv = getPV(name);
     if(channelMap.find(name)->second._asyncReadActivated) return;
     // only open subscription if accessors are present -> else the initial value will be lost
@@ -252,10 +256,11 @@ namespace ChimeraTK {
     }
     ca_flush_io();
     channelMap.find(name)->second._asyncReadActivated = true;
+    channelMap.find(name)->second._initialValueReceived = false;
+    std::cout << "Channel " << channelMap.find(name)->second._caName << " activated for async read." << std::endl;
   }
 
   void ChannelManager::activateChannels() {
-    std::lock_guard<std::mutex> lock(mapLock);
     for(auto& ch : channelMap) {
       if(ch.second._asyncReadActivated) continue;
       // only open subscription if accessors are present -> else the initial value will be lost
@@ -270,11 +275,19 @@ namespace ChimeraTK {
       }
       ca_flush_io();
       ch.second._asyncReadActivated = true;
+      ch.second._initialValueReceived = false;
     }
   }
 
+  bool ChannelManager::checkInitialValueReceived() {
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    for(auto& ch : channelMap) {
+      if(ch.second._asyncReadActivated && !ch.second._initialValueReceived) return false;
+    }
+    return true;
+  }
+
   void ChannelManager::deactivateChannels() {
-    std::lock_guard<std::mutex> lock(mapLock);
     for(auto& ch : channelMap) {
       if(!ch.second._asyncReadActivated) continue;
       ca_clear_subscription(*ch.second._subscriptionId);
@@ -284,11 +297,8 @@ namespace ChimeraTK {
   }
 
   void ChannelManager::resetConnectionState() {
-    std::lock_guard<std::mutex> lock(mapLock);
     for(auto& ch : channelMap) {
-      //      ch.second._accessors.clear();
       ch.second._connected = false;
-      //      ch.second._configured = false;
     }
   }
 
