@@ -145,7 +145,7 @@ namespace ChimeraTK {
     }
     auto pv = getPV(name);
     auto result =
-        ca_create_channel(name.c_str(), ChannelManager::channelStateHandler, backend, DEFAULT_CA_PRIORITY, &pv->chid);
+        ca_create_channel(name.c_str(), ChannelManager::channelStateHandler, backend, default_ca_priority, &pv->chid);
     if(result != ECA_NORMAL) {
       std::stringstream ss;
       ss << "CA error " << ca_message(result) << " occurred while trying to create channel " << name;
@@ -156,7 +156,7 @@ namespace ChimeraTK {
   void ChannelManager::addChannelsFromMap(EpicsBackend* backend) {
     for(auto& ch : channelMap) {
       auto result = ca_create_channel(ch.second._caName.c_str(), ChannelManager::channelStateHandler, backend,
-          DEFAULT_CA_PRIORITY, &ch.second._pv->chid);
+          default_ca_priority, &ch.second._pv->chid);
       if(result != ECA_NORMAL) {
         std::stringstream ss;
         ss << "CA error " << ca_message(result) << " occurred while trying to create channel " << ch.second._caName;

@@ -210,7 +210,7 @@ namespace ChimeraTK {
         if(result != ECA_NORMAL) {
           throw ChimeraTK::runtime_error(std::string("Failed to read pv: ") + pv->name);
         }
-        result = ca_pend_io(_backend->_caTimeout);
+        result = ca_pend_io(default_ca_timeout);
         if(result == ECA_TIMEOUT) {
           throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + pv->name);
         }
@@ -220,7 +220,7 @@ namespace ChimeraTK {
         if(result != ECA_NORMAL) {
           throw ChimeraTK::runtime_error(std::string("Failed to read pv: ") + pv->name);
         }
-        result = ca_pend_io(_backend->_caTimeout);
+        result = ca_pend_io(default_ca_timeout);
         if(result == ECA_TIMEOUT) {
           throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + pv->name);
         }
@@ -267,7 +267,7 @@ namespace ChimeraTK {
       std::cerr << "Failed to to write pv: " << _info._caName << std::endl;
       return false;
     }
-    result = ca_pend_io(_backend->_caTimeout);
+    result = ca_pend_io(default_ca_timeout);
     if(result == ECA_TIMEOUT) {
       std::cerr << "Timeout while writing pv: " << _info._caName << std::endl;
       return false;

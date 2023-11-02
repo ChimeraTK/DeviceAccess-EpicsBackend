@@ -11,8 +11,8 @@
 #include <cadef.h>
 #include <epicsTime.h>
 
-#define DEFAULT_CA_PRIORITY 0 /* Default CA priority */
-#define DEFAULT_TIMEOUT 1.0   /* Default CA timeout */
+static constexpr int default_ca_priority = 0;
+static constexpr float default_ca_timeout = 30.0;
 
 /* Type of timestamp */
 typedef enum { absolute, relative, incremental, incrementalByChan } TimeT;

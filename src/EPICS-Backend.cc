@@ -81,7 +81,7 @@ namespace ChimeraTK {
         std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
         ChannelManager::getInstance().addChannelsFromMap(this);
       }
-      size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+      size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
       for(size_t i = 0; i < n; i++) {
         {
           std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
@@ -102,7 +102,7 @@ namespace ChimeraTK {
       _opened = true;
     }
     if(!_isFunctional) {
-      size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+      size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
       for(size_t i = 0; i < n; i++) {
         {
           std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
@@ -127,7 +127,7 @@ namespace ChimeraTK {
     ChannelManager::getInstance().resetConnectionState();
     if(_isFunctional) ca_context_destroy();
     // wait until connection is closed
-    size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
     for(size_t i = 0; i < n; i++) {
       if(!_isFunctional) break;
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -143,10 +143,9 @@ namespace ChimeraTK {
       ChannelManager::getInstance().deactivateChannels();
       ChannelManager::getInstance().activateChannels();
     }
-    size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
     bool allGood = false;
-    //    for(size_t i = 0; i < n; i++) {
-    while(true) {
+    for(size_t i = 0; i < n; i++) {
       if(ChannelManager::getInstance().checkInitialValueReceived()) {
         allGood = true;
         break;
@@ -154,7 +153,7 @@ namespace ChimeraTK {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     if(!allGood) {
-      throw ChimeraTK::runtime_error("Failded to receive initial value for all subscriptions in activateAsyncRead().");
+      throw ChimeraTK::runtime_error("Failed to receive initial value for all subscriptions in activateAsyncRead().");
     }
     _asyncReadActivated = true;
   }
@@ -319,7 +318,7 @@ namespace ChimeraTK {
     if(result == ECA_TIMEOUT) {
       throw ChimeraTK::runtime_error("Channel setup failed.");
     }
-    size_t n = _caTimeout * 10.0 / 0.1; // sleep 100ms per loop, wait _caTimeout until giving up
+    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
     for(size_t i = 0; i < n; i++) {
       {
         std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);

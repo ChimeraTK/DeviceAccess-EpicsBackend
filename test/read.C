@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
   pv* mypv = (pv*)calloc(1, sizeof(pv));
   mypv->name = (char*)pvName.c_str();
   epicsTimeGetCurrent(&tsStart);
-  result = ca_create_channel(mypv->name, 0, &mypv, DEFAULT_CA_PRIORITY, &mypv->chid);
+  result = ca_create_channel(mypv->name, 0, &mypv, default_ca_priority, &mypv->chid);
   if(result != ECA_NORMAL) {
     std::cerr << "CA error " << ca_message(result)
               << " occurred while trying "

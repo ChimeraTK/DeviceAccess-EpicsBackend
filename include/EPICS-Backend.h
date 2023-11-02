@@ -83,8 +83,6 @@ namespace ChimeraTK {
 
     bool _isFunctional{false};
 
-    double _caTimeout{1.0};
-
     void fillCatalogueFromMapFile(const std::string& mapfile);
 
     void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
