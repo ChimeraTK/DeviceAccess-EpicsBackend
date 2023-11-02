@@ -9,6 +9,7 @@ include(cmake/set_version_numbers.cmake)
 
 include(cmake/set_default_flags.cmake)
 include(cmake/set_default_build_to_release.cmake)
+include(cmake/enable_code_style_check.cmake)
 
 find_package(ChimeraTK-DeviceAccess 03.00 REQUIRED)
 

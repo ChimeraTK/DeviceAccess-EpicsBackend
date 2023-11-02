@@ -28,10 +28,11 @@ add_executable(testReadAsync readAsync.C ${CMAKE_CURRENT_BINARY_DIR}/IOC/bin)
 target_link_libraries(testReadAsync ${EPICS_LIBS} ${EPICS_LDFLAGS})
 
 # binary used during the developement of the backend
-add_executable(testPauseIOC testPauseIOC.C ${CMAKE_CURRENT_BINARY_DIR}/IOC/bin)
+add_executable(testPauseIOC testPauseIOC.C ${library_sources})
 set_target_properties(testPauseIOC PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(testPauseIOC PROPERTIES COMPILE_FLAGS "-DCHIMERATK_UNITTEST")
+set_target_properties(testPauseIOC PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE)
 target_link_libraries(testPauseIOC PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
-                                             PRIVATE ${PROJECT_NAME}
                                              PRIVATE ${EPICS_LIBS} 
                                              PRIVATE ${EPICS_LDFLAGS})
   
@@ -43,11 +44,13 @@ add_executable(testIOC ${CMAKE_CURRENT_BINARY_DIR}/testIOC.C)
 target_link_libraries(testIOC pthread)
 
 FILE(COPY test.map DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-add_executable(testUnifiedBackendTest testUnifiedBackendTest.C)
+message(STATUS "Library sources: ${EPICS_LIBS} ${EPICS_LDFLAGS}")
+add_executable(testUnifiedBackendTest testUnifiedBackendTest.C ${library_sources})
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ${EPICS_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/include)
-#set_target_properties(testUnifiedBackendTest PROPERTIES INCLUDE_DIRECTORIES ${TT})
 target_link_libraries(testUnifiedBackendTest PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
-                                             PRIVATE ${PROJECT_NAME}
                                              PRIVATE ${EPICS_LIBS} 
                                              PRIVATE ${EPICS_LDFLAGS})
-  set_target_properties(testUnifiedBackendTest PROPERTIES LINK_FLAGS "-Wl,--no-as-needed")                                             
+set_target_properties(testUnifiedBackendTest PROPERTIES LINK_FLAGS "-Wl,--no-as-needed")
+set_target_properties(testUnifiedBackendTest PROPERTIES COMPILE_FLAGS "-DCHIMERATK_UNITTEST")
+set_target_properties(testUnifiedBackendTest PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE)
+add_test(testUnifiedBackendTest testUnifiedBackendTest)

@@ -215,8 +215,9 @@ namespace ChimeraTK {
     void addAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
 
     std::mutex mapLock;
+#ifdef CHIMERATK_UNITTEST
     std::atomic<long> currentState; // state used in the tests to wait for a connect/reconnect
-
+#endif
    private:
     // map that connects the EPICS PV name to the ChannelInfo object
     std::map<std::string, ChannelInfo> channelMap;

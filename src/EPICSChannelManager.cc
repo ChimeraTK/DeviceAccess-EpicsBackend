@@ -62,7 +62,9 @@ namespace ChimeraTK {
       std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
       if(!backend->isOpen()) {
+#ifdef CHIMERATK_UNITTEST
         ChannelManager::getInstance().currentState = args.op;
+#endif
         return;
       }
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
@@ -85,8 +87,8 @@ namespace ChimeraTK {
         }
       }
     }
+#ifdef CHIMERATK_UNITTEST
     // set state -> it is used in the test to wait for a connect/reconnect
-    // ToDo:use ifdef to enable only in tests
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     if(args.op == CA_OP_CONN_UP) {
       if(ChannelManager::getInstance().checkAllConnections(true)) {
@@ -100,6 +102,7 @@ namespace ChimeraTK {
         ChannelManager::getInstance().currentState = args.op;
       }
     }
+#endif
   }
 
   void ChannelManager::handleEvent(evargs args) {
