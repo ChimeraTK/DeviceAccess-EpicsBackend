@@ -59,7 +59,7 @@ struct IOCHelper {
       p << "dbpf(\"" << pvName.c_str() << "\",\"" << t.at(0) << "\")" << std::endl;
     }
     else {
-      p << "dbpf(\"" << pvName.c_str() << "\",\"[" << t.at(0);
+      p << "dbpf(\"" << pvName.c_str() << "\",\"[" << t.at(0) << ",";
       if(length > 2) {
         for(size_t i = 0; i < length - 2; i++) {
           p << t.at(1 + i) << ",";

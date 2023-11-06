@@ -1,4 +1,12 @@
-record(longout, "ctkTest:ao")
+record(longout, "ctkTest:longout")
+{
+        field(SCAN, "Passive")
+        field(DESC, "Analog output")
+        field(EGU, "Counts")
+        field(PINI, "1")
+}
+
+record(ao, "ctkTest:ao")
 {
         field(SCAN, "Passive")
         field(DESC, "Analog output")

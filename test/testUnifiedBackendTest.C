@@ -11,6 +11,7 @@
 
 #include <cadef.h>
 #include <iostream>
+#include <string>
 
 #define BOOST_TEST_MODULE testUnifiedBackendTest
 #include <ChimeraTK/UnifiedBackendTest.h>
@@ -55,10 +56,6 @@ struct AllRegisterDefaults {
       case 0:
         if(enable) {
           IOCLauncher::helper->stop();
-          // check if the server is really off
-          //          if(!IOCLauncher::helper->checkConnection(IOCState::Off)) {
-          //            throw std::runtime_error("Failed to force runtime error.");
-          //          }
         }
         else {
           // check if server is running is done by the method itself.
@@ -192,23 +189,127 @@ struct ScalarDefaults<bool> : AllRegisterDefaults {
   }
 };
 
-struct RegAo : ScalarDefaults<int32_t> {
+template<typename T = int32_t>
+struct ArrayDefaults : AllRegisterDefaults {
+  using AllRegisterDefaults::AllRegisterDefaults;
+  size_t nElementsPerChannel() { return 10; }
+  virtual std::string path() = 0;
+  virtual std::string pvName() = 0;
+
+  template<typename UserType>
+  std::vector<std::vector<UserType>> generateValue() {
+    return generateValue(identity<UserType>());
+  }
+
+  template<typename UserType>
+  std::vector<std::vector<UserType>> getRemoteValue() {
+    auto result = IOCLauncher::helper->getValue(pvName());
+    std::vector<std::string> tmp;
+    size_t pos = 0;
+    std::string token;
+    bool firstElement{true};
+    while((pos = result.find(" ")) != std::string::npos) {
+      token = result.substr(0, pos);
+      if(firstElement) {
+        if(std::stoi(token.c_str()) != nElementsPerChannel()) {
+          throw std::runtime_error("Size mismatch when reading array data.");
+        }
+        firstElement = false;
+      }
+      else {
+        tmp.push_back(token);
+      }
+      result.erase(0, pos + 1);
+    }
+    // add last element
+    tmp.push_back(result);
+    std::vector<UserType> values;
+    for(size_t i = 0; i < nElementsPerChannel(); ++i) {
+      values.push_back(ChimeraTK::userTypeToUserType<UserType, std::string>(tmp.at(i)));
+    }
+    return {values};
+  }
+
+  void setRemoteValue() {
+    IOCLauncher::helper->setValue(pvName(), generateValue<std::string>().at(0), nElementsPerChannel());
+  }
+
+ private:
+  template<typename UserType>
+  std::vector<std::vector<UserType>> generateValue(identity<UserType>) {
+    UserType increment(3);
+    std::vector<UserType> val;
+    auto currentData = getRemoteValue<UserType>();
+    for(size_t i = 0; i < nElementsPerChannel(); ++i) {
+      val.push_back(currentData.at(0).at(i) + (i + 1) * increment);
+    }
+    return {val};
+  }
+
+  std::vector<std::vector<std::string>> generateValue(identity<std::string>) {
+    int increment(3);
+    auto currentData = getRemoteValue<int>();
+    std::vector<std::string> val;
+    for(size_t i = 0; i < nElementsPerChannel(); ++i) {
+      val.push_back(std::to_string(currentData.at(0).at(i) + (i + 1) * increment));
+    }
+    return {val};
+  }
+};
+
+struct RegAo : ScalarDefaults<double> {
   std::string path() override { return "ctkTest/ao"; }
   std::string pvName() override { return std::string("ctkTest:ao"); }
   typedef int32_t minimumUserType;
 };
 
-struct RegBo : ScalarDefaults<bool> {
+struct Reglongout : ScalarDefaults<int32_t> {
+  std::string path() override { return "ctkTest/longout"; }
+  std::string pvName() override { return std::string("ctkTest:longout"); }
+  typedef int32_t minimumUserType;
+};
+
+struct RegBoInt : ScalarDefaults<bool> {
   std::string path() override { return "ctkTest/boInt"; }
   std::string pvName() override { return std::string("ctkTest:boInt"); }
   typedef Boolean minimumUserType;
 };
 
+struct RegBoIntInverse : ScalarDefaults<bool> {
+  std::string path() override { return "ctkTest/boIntInverse"; }
+  std::string pvName() override { return std::string("ctkTest:boIntInverse"); }
+  typedef Boolean minimumUserType;
+};
+
+struct RegBoTrueFalse : ScalarDefaults<bool> {
+  std::string path() override { return "ctkTest/boTrueFalse"; }
+  std::string pvName() override { return std::string("ctkTest:boTrueFalse"); }
+  typedef Boolean minimumUserType;
+};
+
+struct RegBotruefalse : ScalarDefaults<bool> {
+  std::string path() override { return "ctkTest/botruefalse"; }
+  std::string pvName() override { return std::string("ctkTest:botruefalse"); }
+  typedef Boolean minimumUserType;
+};
+
+struct RegAao : ArrayDefaults<float> {
+  std::string path() override { return "ctkTest/aao"; }
+  std::string pvName() override { return std::string("ctkTest:aao"); }
+  typedef double minimumUserType;
+};
+
 // use test fixture suite to have access to the fixture class members
 BOOST_FIXTURE_TEST_SUITE(s, IOCLauncher)
 BOOST_AUTO_TEST_CASE(unifiedBackendTest) {
-  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegAo>().addRegister<RegBo>();
-  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBo>();
+  //  auto ubt = ChimeraTK::UnifiedBackendTest<>()
+  //                 .addRegister<RegAo>()
+  //                 .addRegister<RegAao>()
+  //                 .addRegister<RegBoInt>()
+  //                 .addRegister<RegBoIntInverse>()
+  //                 .addRegister<RegBoTrueFalse>()
+  //                 .addRegister<RegBotruefalse>();
+  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBotruefalse>();
   ubt.runTests("(epics:?map=test.map)");
 }
 

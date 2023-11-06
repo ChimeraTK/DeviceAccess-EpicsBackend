@@ -11,7 +11,6 @@ template<typename T>
 void print(size_t i, void* valueRaw, long type) {
   T* tmp1 = (T*)dbr_value_ptr(valueRaw, type);
   T value = tmp1[i];
-  T* tp = (T*)valueRaw;
   std::cout << "Value is: " << value << std::endl;
 }
 
