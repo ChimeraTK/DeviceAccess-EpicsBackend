@@ -211,7 +211,7 @@ struct ArrayDefaults : AllRegisterDefaults {
     while((pos = result.find(" ")) != std::string::npos) {
       token = result.substr(0, pos);
       if(firstElement) {
-        if(std::stoi(token.c_str()) != nElementsPerChannel()) {
+        if(std::stoul(token.c_str()) != nElementsPerChannel()) {
           throw std::runtime_error("Size mismatch when reading array data.");
         }
         firstElement = false;
@@ -293,6 +293,12 @@ struct RegBotruefalse : ScalarDefaults<bool> {
   typedef Boolean minimumUserType;
 };
 
+struct Reglso : ScalarDefaults<std::string> {
+  std::string path() override { return "ctkTest/lso"; }
+  std::string pvName() override { return std::string("ctkTest:lso"); }
+  typedef std::string minimumUserType;
+};
+
 struct RegAao : ArrayDefaults<float> {
   std::string path() override { return "ctkTest/aao"; }
   std::string pvName() override { return std::string("ctkTest:aao"); }
@@ -302,14 +308,16 @@ struct RegAao : ArrayDefaults<float> {
 // use test fixture suite to have access to the fixture class members
 BOOST_FIXTURE_TEST_SUITE(s, IOCLauncher)
 BOOST_AUTO_TEST_CASE(unifiedBackendTest) {
-  //  auto ubt = ChimeraTK::UnifiedBackendTest<>()
-  //                 .addRegister<RegAo>()
-  //                 .addRegister<RegAao>()
-  //                 .addRegister<RegBoInt>()
-  //                 .addRegister<RegBoIntInverse>()
-  //                 .addRegister<RegBoTrueFalse>()
-  //                 .addRegister<RegBotruefalse>();
-  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBotruefalse>();
+  auto ubt = ChimeraTK::UnifiedBackendTest<>()
+                 .addRegister<RegAo>()
+                 .addRegister<RegAao>()
+                 .addRegister<RegBoInt>()
+                 .addRegister<RegBoTrueFalse>()
+                 .addRegister<RegBotruefalse>()
+                 .addRegister<Reglso>();
+  // ToDo: Is such a DB entry ok and why to we receive "0" after we set it to "1"?
+  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBoIntInverse>();
+  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<Reglso>();
   ubt.runTests("(epics:?map=test.map)");
 }
 
