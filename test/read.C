@@ -10,8 +10,14 @@ static epicsTimeStamp tsStart;
 template<typename T>
 void print(size_t i, void* valueRaw, long type) {
   T* tmp1 = (T*)dbr_value_ptr(valueRaw, type);
-  T value = tmp1[i];
-  std::cout << "Value is: " << value << std::endl;
+  if constexpr(std::is_array<T>::value) {
+    //    T value = tmp1;
+    std::cout << "Value is: " << (char*)tmp1 << std::endl;
+  }
+  else {
+    T value = tmp1[i];
+    std::cout << "Value is: " << value << std::endl;
+  }
 }
 
 template<typename T>
@@ -85,6 +91,10 @@ int main(int argc, char* argv[]) {
   unsigned base_type = mypv->dbfType % (LAST_TYPE + 1);
   for(size_t i = 0; i < mypv->nElems; i++) {
     switch(base_type) {
+      case DBR_STRING:
+        print<dbr_string_t>(i, mypv->value, mypv->dbrType);
+        if(i == 0) printTime<dbr_time_string>(i, mypv->value);
+        break;
       case DBR_FLOAT:
         print<dbr_float_t>(i, mypv->value, mypv->dbrType);
         if(i == 0) printTime<dbr_time_float>(i, mypv->value);
