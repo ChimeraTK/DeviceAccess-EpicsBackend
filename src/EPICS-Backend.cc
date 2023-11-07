@@ -178,9 +178,10 @@ namespace ChimeraTK {
     if(info._dbfType == DBR_STSACK_STRING || info._dbfType == DBR_CLASS_NAME) base_type = DBR_STRING;
     //    switch(info._dpfType){
     switch(base_type) {
-        //      case DBR_STRING:
-        //        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path,
-        //        shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister); break;
+      case DBR_STRING:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, dbr_time_string, UserType>>(
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
+        break;
       case DBR_FLOAT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, dbr_time_float, UserType>>(
             path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);

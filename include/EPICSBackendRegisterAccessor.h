@@ -91,6 +91,48 @@ namespace ChimeraTK {
     Void convert(std::string&) { return Void(); }
   };
 
+  template<>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, Void> {
+   public:
+    std::string convert(Void& /*x*/) { return std::string("void"); }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<Void, dbr_string_t> {
+   public:
+    Void convert(dbr_string_t&) { return Void(); }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<std::string, dbr_string_t> {
+   public:
+    std::string convert(dbr_string_t& x) { return std::string(x); }
+  };
+
+  template<typename DestType>
+  class EpicsRangeCheckingDataConverter<DestType, dbr_string_t> {
+   public:
+    DestType convert(char*) { throw std::logic_error("Conversion from string is not allowed."); }
+  };
+
+  template<typename SourceType>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, SourceType> {
+   public:
+    std::string convert(SourceType& x) { return std::to_string(x); }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, std::string> {
+   public:
+    std::string convert(std::string& x) { return x; }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, ChimeraTK::Boolean> {
+   public:
+    std::string convert(ChimeraTK::Boolean& x) { return (x == true ? std::string("true") : std::string("false")); }
+  };
+
   class EpicsBackendRegisterAccessorBase {
    public:
     EpicsBackendRegisterAccessorBase(boost::shared_ptr<EpicsBackend> backend, const EpicsBackendRegisterInfo& info,
@@ -171,6 +213,11 @@ namespace ChimeraTK {
   : EpicsBackendRegisterAccessorBase(
         boost::dynamic_pointer_cast<EpicsBackend>(backend), registerInfo, numberOfWords, wordOffsetInRegister),
     NDRegisterAccessor<CTKType>(path, flags) {
+    if constexpr(std::is_array_v<EpicsBaseType>) {
+      if(numberOfWords > 1) {
+        throw ChimeraTK::logic_error("No support for lso array.");
+      }
+    }
     if(flags.has(AccessMode::raw)) throw ChimeraTK::logic_error("Raw access mode is not supported.");
     NDRegisterAccessor<CTKType>::buffer_2D.resize(1);
     this->accessChannel(0).resize(numberOfWords);
@@ -239,11 +286,21 @@ namespace ChimeraTK {
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     auto pv = ChannelManager::getInstance().getPV(_info._caName);
     EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
-    for(size_t i = 0; i < _numberOfWords; i++) {
-      EpicsBaseType value = tmp[_offsetWords + i];
-      // Fill the NDRegisterAccessor buffer
-      this->accessData(i) = toCTK.convert(value);
+
+    if constexpr(std::is_array_v<EpicsBaseType>) {
+      // only single element as checked in the constructor
+      dbr_string_t tmpStr;
+      strcpy(tmpStr, (char*)tmp);
+      this->accessData(0) = toCTK.convert(tmpStr);
     }
+    else {
+      for(size_t i = 0; i < _numberOfWords; i++) {
+        EpicsBaseType value = tmp[_offsetWords + i];
+        // Fill the NDRegisterAccessor buffer
+        this->accessData(i) = toCTK.convert(value);
+      }
+    }
+
     EpicsType* tp = (EpicsType*)pv->value;
     _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
@@ -259,10 +316,18 @@ namespace ChimeraTK {
     if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
     auto pv = ChannelManager::getInstance().getPV(_info._caName);
     EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
-    for(size_t i = 0; i < _numberOfWords; i++) {
-      tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
+    long result;
+    if constexpr(std::is_array_v<EpicsBaseType>) {
+      // only single element as checked in the constructor
+      result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, toEpics.convert(this->accessData(0)).c_str());
     }
-    auto result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, tmp);
+    else {
+      for(size_t i = 0; i < _numberOfWords; i++) {
+        tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
+      }
+      result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, tmp);
+    }
+
     if(result != ECA_NORMAL) {
       std::cerr << "Failed to to write pv: " << _info._caName << std::endl;
       return false;
