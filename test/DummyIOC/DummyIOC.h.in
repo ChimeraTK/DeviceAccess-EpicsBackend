@@ -28,14 +28,8 @@ struct IOCHelper {
   void start() {
     bp::ipstream is;
     p = bp::opstream();
-    //    _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
-    //        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"), bp::std_in<p, bp::std_out> is);
     _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
-        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"), bp::std_in < p,
-        bp::env["EPICS_CAS_BEACON_PERIOD"] = "0.1", bp::env["EPICS_CAS_INTF_ADDR_LIST"] = "149.220.79.114",
-        bp::env["EPICS_CAS_BEACON_ADDR_LIST"] = "149.220.79.114", bp::env["EPICS_CAS_AUTO_BEACON_ADDR_LIST"] = "NO");
-    // We can not go faster - it takes some time to reconnect for the client!
-    //    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"), bp::std_in<p, bp::std_out> is);
   };
 
   void stop() { _child.terminate(); }
