@@ -260,8 +260,10 @@ namespace ChimeraTK {
 
     if(ca_read_access(pv->chid) != 1) info._isReadable = false;
     if(ca_write_access(pv->chid) != 1) info._isWritable = false;
-
-    if(pv->dbfType == DBF_DOUBLE || pv->dbfType == DBF_FLOAT) {
+    if(pv->dbfType == DBF_STRING) {
+      info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::string, true, true, 320, 300);
+    }
+    else if(pv->dbfType == DBF_DOUBLE || pv->dbfType == DBF_FLOAT) {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, false, true, 320, 300);
     }
     else if(pv->dbfType == DBF_INT || pv->dbfType == DBF_LONG || pv->dbfType == DBF_SHORT) {
@@ -271,8 +273,7 @@ namespace ChimeraTK {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::boolean, true, true, 320, 300);
     }
     else {
-      std::cerr << "Failed to determine data type for node: " << info._caName
-                << " -> entry is not added to the catalogue." << std::endl;
+      std::cerr << "Failed to data descriptor for node: " << info._caName << "." << std::endl;
     }
     info._accessModes.add(AccessMode::wait_for_new_data);
   }
