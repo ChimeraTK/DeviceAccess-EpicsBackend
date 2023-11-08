@@ -143,10 +143,16 @@ struct ScalarDefaults<bool> : AllRegisterDefaults {
   template<typename UserType>
   std::vector<std::vector<UserType>> getRemoteValue() {
     auto result = IOCLauncher::helper->getValue(pvName());
-    auto d = ChimeraTK::userTypeToUserType<UserType, std::string>(IOCLauncher::helper->getValue(pvName()));
+    if(result.compare("True") == 0 || result.compare("true") == 0) {
+      result = "1";
+    }
+    if(result.compare("False") == 0 || result.compare("false") == 0) {
+      result = "0";
+    }
+    auto d = ChimeraTK::userTypeToUserType<UserType, std::string>(result);
     std::stringstream ss;
-    ss << "Received remote value: " << result.c_str() << " which is converted to : "
-       << ChimeraTK::userTypeToUserType<UserType, std::string>(IOCLauncher::helper->getValue(pvName()))
+    ss << "Received remote value: " << result.c_str()
+       << " which is converted to : " << ChimeraTK::userTypeToUserType<UserType, std::string>(result)
        << " and d is set to: " << d << std::endl;
     std::cout << ss.str();
     return {{d}};
@@ -317,7 +323,7 @@ BOOST_AUTO_TEST_CASE(unifiedBackendTest) {
                  .addRegister<Reglso>();
   // ToDo: Is such a DB entry ok and why to we receive "0" after we set it to "1"?
   //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBoIntInverse>();
-  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<Reglso>();
+  //  auto ubt = ChimeraTK::UnifiedBackendTest<>().addRegister<RegBoTrueFalse>();
   ubt.runTests("(epics:?map=test.map)");
 }
 
