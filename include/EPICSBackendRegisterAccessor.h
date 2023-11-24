@@ -227,7 +227,7 @@ namespace ChimeraTK {
       _hasNotificationsQueue = true;
       _notifications = cppext::future_queue<EpicsRawData>(3);
       _readQueue = _notifications.then<void>(
-          [this, pv](EpicsRawData& data) { memcpy(pv->value, data.data, data.size); }, std::launch::deferred);
+          [pv](EpicsRawData& data) { memcpy(pv->value, data.data, data.size); }, std::launch::deferred);
     }
     if(pv->nElems != numberOfWords) _isPartial = true;
     ChannelManager::getInstance().addAccessor(_info._caName, this);
