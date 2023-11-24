@@ -14,24 +14,12 @@
 static constexpr int default_ca_priority = 0;
 static constexpr float default_ca_timeout = 30.0;
 
-/* Type of timestamp */
-typedef enum { absolute, relative, incremental, incrementalByChan } TimeT;
-
-/* Output formats for integer data types */
-typedef enum { dec, bin, oct, hex } IntFormatT;
-
 /* Structure representing one PV (= channel) */
 typedef struct {
   char* name;
   chanId chid;
   long dbfType;
   long dbrType;
-  unsigned long nElems;   // True length of data in value
-  unsigned long reqElems; // Requested length of data
-  int status;
+  unsigned long nElems; ///< True length of data in value
   void* value;
-  epicsTimeStamp tsPreviousC;
-  epicsTimeStamp tsPreviousS;
-  char firstStampPrinted;
-  char onceConnected;
 } pv;

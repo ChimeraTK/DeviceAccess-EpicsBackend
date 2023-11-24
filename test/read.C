@@ -64,13 +64,11 @@ int main(int argc, char* argv[]) {
     std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << mypv->name
               << std::endl;
   }
-  mypv->status = result;
 
   unsigned long nElems = ca_element_count(mypv->chid);
   mypv->dbfType = ca_field_type(mypv->chid);
   mypv->dbrType = dbf_type_to_DBR_TIME(mypv->dbfType);
   if(ca_state(mypv->chid) == cs_conn) {
-    mypv->onceConnected = 1;
     mypv->nElems = nElems;
     mypv->value = calloc(1, dbr_size_n(mypv->dbrType, mypv->nElems));
     if(!mypv->value) {

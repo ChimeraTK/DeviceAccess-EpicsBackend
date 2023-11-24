@@ -16,7 +16,6 @@ static bool ready = false;
 static void event_handler(evargs args) {
   pv* ppv = (pv*)args.usr;
 
-  ppv->status = args.status;
   if(args.status == ECA_NORMAL) {
     ppv->dbrType = args.type;
     ppv->value = calloc(1, dbr_size_n(args.type, args.count));
@@ -73,14 +72,11 @@ int main() {
   while(!ready) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
-  mypv->status = result;
-
   unsigned long nElems = ca_element_count(mypv->chid);
   mypv->dbfType = ca_field_type(mypv->chid);
   mypv->dbrType = dbf_type_to_DBR_TIME(mypv->dbfType);
   if(ca_state(mypv->chid) == cs_conn) {
     nConn++;
-    mypv->onceConnected = 1;
     mypv->nElems = nElems;
     mypv->value = calloc(1, dbr_size_n(mypv->dbrType, mypv->nElems));
     if(!mypv->value) {
