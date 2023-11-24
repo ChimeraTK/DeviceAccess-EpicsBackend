@@ -79,7 +79,7 @@ namespace ChimeraTK {
 
     /**
      * Destructor called on SIGINT!
-     * So the map is cleared here.
+     * So the channelMap is cleared here.
      */
     ~ChannelManager();
 
@@ -154,7 +154,7 @@ namespace ChimeraTK {
      * See channelStateHandler.
      *
      * \param name The EPICS channel access name.
-     * @return True if channel is configured.
+     * \return True if channel is configured.
      */
     bool isChannelConfigured(const std::string& name);
 
@@ -214,13 +214,12 @@ namespace ChimeraTK {
      */
     void addAccessor(const std::string& name, EpicsBackendRegisterAccessorBase* accessor);
 
-    std::mutex mapLock;
+    std::mutex mapLock; ///< Lock used to protect the channelMap
 #ifdef CHIMERATK_UNITTEST
     std::atomic<long> currentState; // state used in the tests to wait for a connect/reconnect
 #endif
    private:
-    // map that connects the EPICS PV name to the ChannelInfo object
-    std::map<std::string, ChannelInfo> channelMap;
+    std::map<std::string, ChannelInfo> channelMap; ///< map that connects the EPICS PV name to the ChannelInfo object
 
     /**
      *  Check if a channel is registered.

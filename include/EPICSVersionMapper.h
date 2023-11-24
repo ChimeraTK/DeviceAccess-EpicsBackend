@@ -21,7 +21,7 @@ namespace EPICS {
   /**
    * This class is needed, because if two accessors are create and receive the same data from the server their
    * VersionNumber is required to be identical. Since the VersionNumber is not identical just because it is created
-   * with the same timestamp this VersionMapper is needed. It takes care of holding a global map that connects source
+   * with the same time stamp this VersionMapper is needed. It takes care of holding a global map that connects source
    * time stamps attached  to OPC UA data to ChimeraTK::VersionNumber.
    *
    * It assumes that OPC UA source time stamps are unique.
@@ -42,7 +42,7 @@ namespace EPICS {
     VersionMapper(const VersionMapper&) = delete;
     VersionMapper& operator=(const VersionMapper&) = delete;
 
-    std::mutex _mapMutex;
+    std::mutex _mapMutex; ///< Lock used to protect the _versionMap
     std::map<int64_t, ChimeraTK::VersionNumber> _versionMap{};
 
     const int64_t _epicsTimeOffset{631152000}; ///< Offest to be applied since epics counts seconds since 1990
