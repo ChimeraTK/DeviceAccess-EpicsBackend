@@ -16,7 +16,7 @@
 namespace ChimeraTK {
 
   ChannelInfo::ChannelInfo(std::string channelName) {
-    _pv.reset((pv*)calloc(1, sizeof(pv)));
+    _pv.reset((pv*)calloc(1, sizeof(pv)), free);
     _caName = channelName;
     _pv->name = (char*)_caName.c_str();
   };
