@@ -52,7 +52,6 @@ namespace ChimeraTK {
       configureChannel(reg);
     }
     _catalogue_filled = true;
-    _isFunctional = true;
   }
 
   EpicsBackend::~EpicsBackend() {
@@ -62,23 +61,21 @@ namespace ChimeraTK {
       ca_clear_channel(reg._pv->chid);
     }
     ChannelManager::getInstance().cleanup();
-    if(_isFunctional) ca_context_destroy();
+    if(isFunctional()) ca_context_destroy(); // FIXME: after close() isFunctional() cannot be true!
   }
 
   void EpicsBackend::open() {
     if(!_catalogue_filled) {
       fillCatalogueFromMapFile(_mapfile);
       _catalogue_filled = true;
-      _isFunctional = true;
     }
-    if(!_isFunctional) {
+    if(!isFunctional()) {
       for(auto& reg : _catalogue_mutable) {
         openChannel(reg);
       }
       ChannelManager::getInstance().waitForConnections(_caTimeout);
-      _isFunctional = true;
     }
-    _opened = true;
+    setOpenedAndClearException();
   }
 
   void EpicsBackend::close() {
@@ -88,12 +85,11 @@ namespace ChimeraTK {
      * which is done currently in the constructor of the Accessor.
      */
     _opened = false;
-    // set to false -> triggers re-opening of all channels on open
-    _isFunctional = false;
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
-    if(!_opened || !_isFunctional) return;
+    if(!isFunctional()) return;
+    /// FIXME: This is not thread safe. See comment in setExceptionImpl() for details.
     _asyncReadActivated = true;
   }
 
@@ -271,13 +267,16 @@ namespace ChimeraTK {
     ChannelManager::getInstance().waitForConnections(_caTimeout);
   }
 
-  void EpicsBackend::setException() {
-    //\ToDo: Why I have to check is functional here? If not setException is called constantly and which means
-    //_isFunctional will stay false even if reset in the state handler.
-    if(_isFunctional) {
-      _isFunctional = false;
-      _asyncReadActivated = false;
-      ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
-    }
+  void EpicsBackend::setExceptionImpl() noexcept {
+    /// FIXME: This is not thread safe for several reasons!
+    /// 1. _asyncReadActivated is a plain bool variable, so some thread synchronisation mechamism is missing (e.g.
+    ///    convert into std::atomic).
+    /// 2. We need the guarantee that nothing writes to the accessor queues beyond this point. In the
+    ///    EpicsBackendRegisterAccessorBase, the _asyncReadActivated flag is first checked and then the queue is filled.
+    ///    There is no guarantee that in between the check and the queue filling this function is called. This would
+    ///    violate the specification and confuse e.g. ApplicationCore exception handling.
+    _asyncReadActivated = false;
+    /// FIXME: There is missing code here! The queues of all accessors need to be filled with exceptions (if asyncRead
+    /// was active before)!
   }
 } // namespace ChimeraTK

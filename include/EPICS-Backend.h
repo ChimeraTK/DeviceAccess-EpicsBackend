@@ -25,7 +25,6 @@ namespace ChimeraTK {
     ~EpicsBackend();
     static boost::shared_ptr<DeviceBackend> createInstance(
         std::string address, std::map<std::string, std::string> parameters);
-    void setBackendState(bool isFunctional) { _isFunctional = isFunctional; }
     bool _asyncReadActivated{false};
 
    protected:
@@ -36,7 +35,7 @@ namespace ChimeraTK {
      */
     RegisterCatalogue getRegisterCatalogue() const override { return RegisterCatalogue(_catalogue_mutable.clone()); };
 
-    void setException() override;
+    void setExceptionImpl() noexcept override;
 
     void open() override;
 
@@ -47,8 +46,6 @@ namespace ChimeraTK {
       ss << "EPICS Server";
       return ss.str();
     }
-
-    bool isFunctional() const override { return _isFunctional; };
 
     void activateAsyncRead() noexcept override;
 
@@ -80,8 +77,6 @@ namespace ChimeraTK {
      * Keep track if catalog is filled using this bool.
      */
     bool _catalogue_filled;
-
-    bool _isFunctional{false};
 
     double _caTimeout{1.0};
 

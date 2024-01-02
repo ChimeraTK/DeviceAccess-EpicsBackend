@@ -41,11 +41,12 @@ namespace ChimeraTK {
     if(args.op == CA_OP_CONN_UP) {
       std::cout << "Channel access established." << std::endl;
       ChannelManager::getInstance().channelMap.at(args.chid)._connected = true;
-      backend->setBackendState(true);
+      // Note: backend opened/isFunctional state must not be set to open/function outside the open() function!
     }
     else if(args.op == CA_OP_CONN_DOWN) {
       std::cout << "Channel access closed." << std::endl;
-      backend->setBackendState(false);
+      backend->setException(std::string("Channel for PV ") +
+          ChannelManager::getInstance().channelMap.at(args.chid)._caName + " was disconnected.");
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       // check if channel is in map -> map might be already cleared.
       if(ChannelManager::getInstance().channelMap.count(args.chid)) {
