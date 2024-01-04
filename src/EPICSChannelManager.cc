@@ -19,7 +19,7 @@ namespace ChimeraTK {
     _pv.reset((pv*)calloc(1, sizeof(pv)), free);
     _caName = channelName;
     _pv->name = (char*)_caName.c_str();
-  };
+  }
 
   bool ChannelInfo::isChannelName(std::string channelName) {
     return _caName.compare(channelName) == 0;

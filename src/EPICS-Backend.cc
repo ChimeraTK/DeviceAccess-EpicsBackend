@@ -153,7 +153,7 @@ namespace ChimeraTK {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     if(!allGood) {
-      throw ChimeraTK::runtime_error("Failed to receive initial value for all subscriptions in activateAsyncRead().");
+      std::cerr << "Failed to receive initial value for all subscriptions in activateAsyncRead()." << std::endl;
     }
     _asyncReadActivated = true;
   }
