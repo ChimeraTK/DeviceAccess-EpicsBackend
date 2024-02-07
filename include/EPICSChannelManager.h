@@ -236,5 +236,11 @@ namespace ChimeraTK {
      * \remark Lock the map if you intend to change the map!
      */
     std::map<std::string, ChannelInfo>::iterator findChid(const chanId& chid);
+
+    /**
+     * Create channel access subscription.
+     * @param channel
+     */
+    void activateChannel(ChannelInfo* channel);
   };
 } // namespace ChimeraTK

@@ -42,7 +42,6 @@ namespace ChimeraTK {
   void ChannelManager::channelStateHandler(connection_handler_args args) {
     auto backend = reinterpret_cast<EpicsBackend*>(ca_puser(args.chid));
     if(args.op == CA_OP_CONN_UP) {
-      std::cout << "Channel access established." << std::endl;
       backend->setBackendState(true);
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
       // channel should have been added to the manager - if not let throw here, because this should not happen
@@ -59,7 +58,6 @@ namespace ChimeraTK {
       }
     }
     else if(args.op == CA_OP_CONN_DOWN) {
-      std::cout << "Channel access closed." << std::endl;
       backend->setBackendState(false);
       if(!backend->isOpen()) {
 #ifdef CHIMERATK_UNITTEST
@@ -76,7 +74,7 @@ namespace ChimeraTK {
       }
 
       for(auto& accessor : it->second._accessors) {
-        if(!accessor->_hasNotificationsQueue) {
+        if(!accessor->_hasNotificationsQueue || !accessor->_backend->_asyncReadActivated) {
           continue;
         }
         try {
@@ -247,39 +245,30 @@ namespace ChimeraTK {
 
   void ChannelManager::activateChannel(const std::string& name) {
     auto pv = getPV(name);
-    if(channelMap.find(name)->second._asyncReadActivated) return;
+    activateChannel(&channelMap.find(name)->second);
+  }
+
+  void ChannelManager::activateChannel(ChannelInfo* channel) {
+    if(channel->_asyncReadActivated) return;
     // only open subscription if accessors are present -> else the initial value will be lost
     // The handler will be called directly after creating the subscription
     // E.g. in case of QtHardmon EpicsBackend::activateAsyncRead is called first and accessors are added later
-    if(channelMap.find(name)->second._accessors.size() == 0) return;
-    channelMap.find(name)->second._subscriptionId = new evid();
-    auto ret = ca_create_subscription(pv->dbrType, pv->nElems, pv->chid, DBE_VALUE, &ChannelManager::handleEvent,
-        static_cast<ChannelManager*>(this), channelMap.find(name)->second._subscriptionId);
+    if(channel->_accessors.size() == 0) return;
+    channel->_subscriptionId = new evid();
+    auto ret = ca_create_subscription(channel->_pv->dbrType, channel->_pv->nElems, channel->_pv->chid, DBE_VALUE,
+        &ChannelManager::handleEvent, static_cast<ChannelManager*>(this), channel->_subscriptionId);
     if(ret != ECA_NORMAL) {
-      throw ChimeraTK::runtime_error(std::string("Failed to create subscription for channel: ") + pv->name);
+      throw ChimeraTK::runtime_error(std::string("Failed to create subscription for channel: ") + channel->_pv->name);
     }
     ca_flush_io();
-    channelMap.find(name)->second._asyncReadActivated = true;
-    channelMap.find(name)->second._initialValueReceived = false;
-    std::cout << "Channel " << channelMap.find(name)->second._caName << " activated for async read." << std::endl;
+    channel->_asyncReadActivated = true;
+    channel->_initialValueReceived = false;
+    std::cout << "Channel " << channel->_caName << " activated for async read." << std::endl;
   }
 
   void ChannelManager::activateChannels() {
     for(auto& ch : channelMap) {
-      if(ch.second._asyncReadActivated) continue;
-      // only open subscription if accessors are present -> else the initial value will be lost
-      // The handler will be called directly after creating the subscription
-      // E.g. in case of QtHardmon EpicsBackend::activateAsyncRead is called first and accessors are added later
-      if(ch.second._accessors.size() == 0) continue;
-      ch.second._subscriptionId = new evid();
-      auto ret = ca_create_subscription(ch.second._pv->dbrType, ch.second._pv->nElems, ch.second._pv->chid, DBE_VALUE,
-          &ChannelManager::handleEvent, static_cast<ChannelManager*>(this), ch.second._subscriptionId);
-      if(ret != ECA_NORMAL) {
-        throw ChimeraTK::runtime_error(std::string("Failed to create subscription for channel: ") + ch.second._caName);
-      }
-      ca_flush_io();
-      ch.second._asyncReadActivated = true;
-      ch.second._initialValueReceived = false;
+      activateChannel(&ch.second);
     }
   }
 
@@ -308,14 +297,20 @@ namespace ChimeraTK {
 
   void ChannelManager::setException(const std::string error) {
     std::lock_guard<std::mutex> lock(mapLock);
+    ChannelManager::getInstance().deactivateChannels();
     for(auto& mapItem : channelMap) {
-      for(auto& accessor : mapItem.second._accessors) {
-        try {
-          throw ChimeraTK::runtime_error(error);
-        }
-        catch(...) {
-          if(accessor->_hasNotificationsQueue) {
-            accessor->_notifications.push_exception(std::current_exception());
+      // only push exceptions to channels that are still connected
+      // if an exception is see on the first channel it is push to the notification queue and _connected is set false.
+      if(mapItem.second._connected) {
+        mapItem.second._connected = false;
+        for(auto& accessor : mapItem.second._accessors) {
+          try {
+            throw ChimeraTK::runtime_error(error);
+          }
+          catch(...) {
+            if(accessor->_hasNotificationsQueue) {
+              accessor->_notifications.push_overwrite_exception(std::current_exception());
+            }
           }
         }
       }

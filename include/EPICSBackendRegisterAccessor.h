@@ -246,11 +246,10 @@ namespace ChimeraTK {
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously() {
+    _backend->checkActiveException();
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    if(!ChannelManager::getInstance().isChannelConnected(_info._caName) || !_backend->isFunctional()) {
-      throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
-    }
     auto pv = ChannelManager::getInstance().getPV(_info._caName);
+    // one could also use ChannelManager::isChannelConnected -> however we ask explicitly ChannelAccess here
     if(ca_state(pv->chid) == cs_conn) {
       if(pv->nElems == 1) {
         auto result = ca_get(pv->dbrType, pv->chid, pv->value);
@@ -274,9 +273,9 @@ namespace ChimeraTK {
       }
     }
     else {
-      std::cerr << "Disconnected when filling catalogue entry for " << _info._name << "(" << pv->name << ")"
-                << std::endl;
-      return;
+      throw ChimeraTK::runtime_error(
+          std::string("ChannelAccess not connected in doReadTransferSynchronously when writing: ") + _info._name + "(" +
+          pv->name + ")");
     }
   }
 
@@ -309,33 +308,37 @@ namespace ChimeraTK {
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   bool EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doWriteTransfer(
       VersionNumber /*versionNumber*/) {
-    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-    if(!ChannelManager::getInstance().isChannelConnected(_info._caName) || !_backend->isFunctional()) {
-      throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
-    }
-    if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
+    _backend->checkActiveException();
     auto pv = ChannelManager::getInstance().getPV(_info._caName);
-    EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
-    long result;
-    if constexpr(std::is_array_v<EpicsBaseType>) {
-      // only single element as checked in the constructor
-      result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, toEpics.convert(this->accessData(0)).c_str());
+    // one could also use ChannelManager::isChannelConnected -> however we ask explicitly ChannelAccess here
+    if(ca_state(pv->chid) == cs_conn) {
+      if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
+      EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
+      long result;
+      if constexpr(std::is_array_v<EpicsBaseType>) {
+        // only single element as checked in the constructor
+        result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, toEpics.convert(this->accessData(0)).c_str());
+      }
+      else {
+        for(size_t i = 0; i < _numberOfWords; i++) {
+          tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
+        }
+        result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, tmp);
+      }
+
+      if(result != ECA_NORMAL) {
+        std::cerr << "Failed to to write pv: " << _info._caName << std::endl;
+        return false;
+      }
+      result = ca_pend_io(default_ca_timeout);
+      if(result == ECA_TIMEOUT) {
+        std::cerr << "Timeout while writing pv: " << _info._caName << std::endl;
+        return false;
+      }
     }
     else {
-      for(size_t i = 0; i < _numberOfWords; i++) {
-        tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
-      }
-      result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, tmp);
-    }
-
-    if(result != ECA_NORMAL) {
-      std::cerr << "Failed to to write pv: " << _info._caName << std::endl;
-      return false;
-    }
-    result = ca_pend_io(default_ca_timeout);
-    if(result == ECA_TIMEOUT) {
-      std::cerr << "Timeout while writing pv: " << _info._caName << std::endl;
-      return false;
+      throw ChimeraTK::runtime_error(std::string("ChannelAccess not connected in doWriteTransfer when writing: ") +
+          _info._name + "(" + pv->name + ")");
     }
     return true;
   }

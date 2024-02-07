@@ -26,10 +26,9 @@ namespace ChimeraTK {
     ~EpicsBackend();
     static boost::shared_ptr<DeviceBackend> createInstance(
         std::string address, std::map<std::string, std::string> parameters);
-    void setBackendState(bool isFunctional) { _isFunctional = isFunctional; }
+    void setBackendState(const bool& channelAccessUp) { _channelAccessUp = channelAccessUp; }
     std::atomic<bool> _asyncReadActivated{false};
-
-    bool isFunctional() const override { return _isFunctional; };
+    std::atomic<bool> _channelAccessUp{false};
 
     EpicsBackend(const std::string& mapfile = "");
 
@@ -38,7 +37,7 @@ namespace ChimeraTK {
      */
     RegisterCatalogue getRegisterCatalogue() const override { return RegisterCatalogue(_catalogue_mutable.clone()); };
 
-    void setException() override;
+    void setExceptionImpl() noexcept override;
 
     void open() override;
 
@@ -81,7 +80,12 @@ namespace ChimeraTK {
      */
     bool _catalogue_filled;
 
-    bool _isFunctional{false};
+    /**
+     * During creation already channels are set up.
+     * When entering open() the first time this is a special case,
+     * because normally close() was called before and no channels are set up.
+     */
+    bool _freshCreated;
 
     void fillCatalogueFromMapFile(const std::string& mapfile);
 

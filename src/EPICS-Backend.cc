@@ -40,13 +40,12 @@ std::string backend_name = "epics";
 namespace ChimeraTK {
   EpicsBackend::BackendRegisterer EpicsBackend::backendRegisterer;
 
-  EpicsBackend::EpicsBackend(const std::string& mapfile) : _catalogue_filled(false) {
+  EpicsBackend::EpicsBackend(const std::string& mapfile) : _catalogue_filled(false), _freshCreated(true) {
     FILL_VIRTUAL_FUNCTION_TEMPLATE_VTABLE(getRegisterAccessor_impl);
     prepareChannelAccess();
 
     fillCatalogueFromMapFile(mapfile);
     _catalogue_filled = true;
-    _isFunctional = true;
   }
 
   EpicsBackend::~EpicsBackend() {
@@ -70,52 +69,38 @@ namespace ChimeraTK {
   }
 
   void EpicsBackend::open() {
-    if(_isFunctional) {
-      _opened = true;
-      return;
-    }
-    if(!_opened) {
-      // device was closed -> set up channel access again (else open is called for recovery)
-      prepareChannelAccess();
-      {
-        std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-        ChannelManager::getInstance().addChannelsFromMap(this);
+    if(!isFunctional()) {
+      // after closing a new ca_context is needed (_opened is set also in constructor to signal prepareChannelAccess was
+      // just called before)
+      if(!_freshCreated) {
+        prepareChannelAccess();
+        {
+          std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+          ChannelManager::getInstance().addChannelsFromMap(this);
+        }
+      }
+      else {
+        _freshCreated = false;
       }
       size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
       for(size_t i = 0; i < n; i++) {
         {
           std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
           if(ChannelManager::getInstance().checkAllConnections(true)) {
-            _isFunctional = true;
+            _channelAccessUp = true;
             break;
           }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
-      if(!_isFunctional) {
+      if(!_channelAccessUp) {
         throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
       }
       if(_asyncReadActivated) {
         std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
         ChannelManager::getInstance().activateChannels();
       }
-      _opened = true;
-    }
-    if(!_isFunctional) {
-      size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
-      for(size_t i = 0; i < n; i++) {
-        {
-          std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
-          if(ChannelManager::getInstance().checkAllConnections(true)) {
-            _isFunctional = true;
-            break;
-          }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-      if(!_isFunctional) {
-        throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
-      }
+      setOpenedAndClearException();
     }
   }
 
@@ -125,18 +110,18 @@ namespace ChimeraTK {
     std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
     ChannelManager::getInstance().deactivateChannels();
     ChannelManager::getInstance().resetConnectionState();
-    if(_isFunctional) ca_context_destroy();
+    ca_context_destroy();
     // wait until connection is closed
     size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
     for(size_t i = 0; i < n; i++) {
-      if(!_isFunctional) break;
+      if(isFunctional()) break;
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
     //    if(_asyncReadActivated || !_opened || !_isFunctional) return;
-    if(!_opened || !_isFunctional) return;
+    if(!isFunctional()) return;
     // activate async read expects an initial value so deactivate channels first to force initial value
     {
       std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
@@ -325,13 +310,13 @@ namespace ChimeraTK {
       {
         std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
         if(ChannelManager::getInstance().checkAllConnections(true)) {
-          _isFunctional = true;
+          _channelAccessUp = true;
           break;
         }
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    if(!_isFunctional) {
+    if(!_channelAccessUp) {
       throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
     }
     for(auto& reg : _catalogue_mutable) {
@@ -339,13 +324,8 @@ namespace ChimeraTK {
     }
   }
 
-  void EpicsBackend::setException() {
-    //\ToDo: Why I have to check is functional here? If not setException is called constantly and which means
-    //_isFunctional will stay false even if reset in the state handler.
-    if(_isFunctional) {
-      _isFunctional = false;
-      _asyncReadActivated = false;
-      ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
-    }
+  void EpicsBackend::setExceptionImpl() noexcept {
+    _asyncReadActivated = false;
+    ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
   }
 } // namespace ChimeraTK
