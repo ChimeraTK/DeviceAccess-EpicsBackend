@@ -1,0 +1,8 @@
+ctkTest/ao ctkTest:ao
+ctkTest/longout ctkTest:longout
+ctkTest/aao ctkTest:aao
+ctkTest/boInt ctkTest:boInt
+ctkTest/boIntInverse ctkTest:boIntInverse
+ctkTest/boTrueFalse ctkTest:boTrueFalse
+ctkTest/botruefalse ctkTest:botruefalse
+ctkTest/lso ctkTest:lso

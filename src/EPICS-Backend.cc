@@ -9,7 +9,7 @@
 
 #include "EPICS-Backend.h"
 
-#include "EPICS-BackendRegisterAccessor.h"
+#include "EPICSBackendRegisterAccessor.h"
 #include "EPICSChannelManager.h"
 
 #include <ChimeraTK/BackendFactory.h>
@@ -17,8 +17,10 @@
 
 #include <boost/tokenizer.hpp>
 
+#include <cadef.h>
 #include <fstream>
 #include <iostream>
+#include <thread>
 #include <vector>
 typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
@@ -38,62 +40,106 @@ std::string backend_name = "epics";
 namespace ChimeraTK {
   EpicsBackend::BackendRegisterer EpicsBackend::backendRegisterer;
 
-  EpicsBackend::EpicsBackend(const std::string& mapfile) : _catalogue_filled(false), _mapfile(mapfile) {
+  EpicsBackend::EpicsBackend(const std::string& mapfile) : _catalogue_filled(false), _freshCreated(true) {
     FILL_VIRTUAL_FUNCTION_TEMPLATE_VTABLE(getRegisterAccessor_impl);
+    prepareChannelAccess();
+
+    fillCatalogueFromMapFile(mapfile);
+    _catalogue_filled = true;
+  }
+
+  EpicsBackend::~EpicsBackend() {
+    _asyncReadActivated = false;
+    close();
+    ChannelManager::getInstance().cleanup();
+  }
+
+  void EpicsBackend::prepareChannelAccess() {
+    // introduced to run the unit tests
+    // \ToDo: Why is that needed - each test finishes with closing the device which should destroy the context already
+    if(ca_current_context()) {
+      ca_context_destroy();
+    }
     auto result = ca_context_create(ca_enable_preemptive_callback);
     if(result != ECA_NORMAL) {
       std::stringstream ss;
       ss << "CA error " << ca_message(result) << "occurred while trying to start channel access.";
       throw ChimeraTK::runtime_error(ss.str());
     }
-
-    fillCatalogueFromMapFile(_mapfile);
-    for(auto& reg : _catalogue_mutable) {
-      configureChannel(reg);
-    }
-    _catalogue_filled = true;
-    _isFunctional = true;
-  }
-
-  EpicsBackend::~EpicsBackend() {
-    _asyncReadActivated = false;
-    if(_opened) close();
-    for(auto& reg : _catalogue_mutable) {
-      ca_clear_channel(reg._pv->chid);
-    }
-    ChannelManager::getInstance().cleanup();
-    if(_isFunctional) ca_context_destroy();
   }
 
   void EpicsBackend::open() {
-    if(!_catalogue_filled) {
-      fillCatalogueFromMapFile(_mapfile);
-      _catalogue_filled = true;
-      _isFunctional = true;
-    }
-    if(!_isFunctional) {
-      for(auto& reg : _catalogue_mutable) {
-        openChannel(reg);
+    if(!isFunctional()) {
+      // after closing a new ca_context is needed (_opened is set also in constructor to signal prepareChannelAccess was
+      // just called before)
+      if(!_freshCreated) {
+        prepareChannelAccess();
+        {
+          std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+          ChannelManager::getInstance().addChannelsFromMap(this);
+        }
       }
-      ChannelManager::getInstance().waitForConnections(_caTimeout);
-      _isFunctional = true;
+      else {
+        _freshCreated = false;
+      }
+      size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
+      for(size_t i = 0; i < n; i++) {
+        {
+          std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+          if(ChannelManager::getInstance().checkAllConnections(true)) {
+            _channelAccessUp = true;
+            break;
+          }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      if(!_channelAccessUp) {
+        throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
+      }
+      if(_asyncReadActivated) {
+        std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+        ChannelManager::getInstance().activateChannels();
+      }
+      setOpenedAndClearException();
     }
-    _opened = true;
   }
 
   void EpicsBackend::close() {
-    /* Do not try to close the channel of CA
-     * Each Accessor sets up a channel access subscription based on the channel ID
-     * If it is closed here each accessor would need to set up again the subscription,
-     * which is done currently in the constructor of the Accessor.
-     */
     _opened = false;
-    // set to false -> triggers re-opening of all channels on open
-    _isFunctional = false;
+    _asyncReadActivated = false;
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    ChannelManager::getInstance().deactivateChannels();
+    ChannelManager::getInstance().resetConnectionState();
+    ca_context_destroy();
+    // wait until connection is closed
+    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
+    for(size_t i = 0; i < n; i++) {
+      if(isFunctional()) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
-    if(!_opened || !_isFunctional) return;
+    //    if(_asyncReadActivated || !_opened || !_isFunctional) return;
+    if(!isFunctional()) return;
+    // activate async read expects an initial value so deactivate channels first to force initial value
+    {
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+      ChannelManager::getInstance().deactivateChannels();
+      ChannelManager::getInstance().activateChannels();
+    }
+    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
+    bool allGood = false;
+    for(size_t i = 0; i < n; i++) {
+      if(ChannelManager::getInstance().checkInitialValueReceived()) {
+        allGood = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if(!allGood) {
+      std::cerr << "Failed to receive initial value for all subscriptions in activateAsyncRead()." << std::endl;
+    }
     _asyncReadActivated = true;
   }
 
@@ -104,44 +150,47 @@ namespace ChimeraTK {
 
     EpicsBackendRegisterInfo info = _catalogue_mutable.getBackendRegister(registerPathName);
 
-    if(numberOfWords + wordOffsetInRegister > info._pv->nElems || (numberOfWords == 0 && wordOffsetInRegister > 0)) {
+    if(numberOfWords + wordOffsetInRegister > info._nElements || (numberOfWords == 0 && wordOffsetInRegister > 0)) {
       std::stringstream ss;
       ss << "Requested number of words/elements ( " << numberOfWords << ") with offset " << wordOffsetInRegister
-         << " exceeds the number of available words/elements: " << info._pv->nElems;
+         << " exceeds the number of available words/elements: " << info._nElements;
       throw ChimeraTK::logic_error(ss.str());
     }
 
-    if(numberOfWords == 0) numberOfWords = info._pv->nElems;
+    if(numberOfWords == 0) numberOfWords = info._nElements;
 
-    unsigned base_type = info._pv->dbfType % (LAST_TYPE + 1);
-    if(info._pv->dbfType == DBR_STSACK_STRING || info._pv->dbfType == DBR_CLASS_NAME) base_type = DBR_STRING;
-    info._pv->name = (char*)info._caName.c_str();
+    unsigned base_type = info._dbfType % (LAST_TYPE + 1);
+    if(info._dbfType == DBR_STSACK_STRING || info._dbfType == DBR_CLASS_NAME) base_type = DBR_STRING;
     //    switch(info._dpfType){
     switch(base_type) {
-        //      case DBR_STRING:
-        //        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, UserType>>(path,
-        //        shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister); break;
+      case DBR_STRING:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_string_t, dbr_time_string, UserType>>(
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
+        break;
       case DBR_FLOAT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_float_t, dbr_time_float, UserType>>(
-            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
         break;
       case DBR_DOUBLE:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_double_t, dbr_time_double, UserType>>(
-            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
         break;
       case DBR_CHAR:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_char_t, dbr_time_char, UserType>>(
-            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
         break;
       case DBR_SHORT:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_short_t, dbr_time_short, UserType>>(
-            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
         break;
       case DBR_LONG:
         return boost::make_shared<EpicsBackendRegisterAccessor<dbr_long_t, dbr_time_long, UserType>>(
-            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
         break;
-        //      case DBR_ENUM:
+      case DBR_ENUM:
+        return boost::make_shared<EpicsBackendRegisterAccessor<dbr_enum_t, dbr_time_enum, UserType>>(
+            path, shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister, _asyncReadActivated);
+        break;
         //        if(dbr_type_is_CTRL(info._dpfType))
         //          return boost::make_shared<EpicsBackendRegisterAccessor<dbr_gr_enum, UserType>>(path,
         //          shared_from_this(), info, flags, numberOfWords, wordOffsetInRegister);
@@ -153,7 +202,7 @@ namespace ChimeraTK {
         //          info, flags, numberOfWords, wordOffsetInRegister);
         //        break;
       default:
-        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info._pv->dbfType) + " not implemented.");
+        throw ChimeraTK::runtime_error(std::string("Type ") + std::to_string(info._dbfType) + " not implemented.");
         break;
     }
   }
@@ -173,57 +222,43 @@ namespace ChimeraTK {
 
   void EpicsBackend::addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName) {
     EpicsBackendRegisterInfo info(path);
-    info._pv.reset(static_cast<pv*>(calloc(1, sizeof(pv))), free);
     info._caName = std::string(*pvName.get());
-    info._pv->name = (char*)info._caName.c_str();
-    _catalogue_mutable.addRegister(info);
-    openChannel(info);
-  }
-
-  void EpicsBackend::openChannel(const EpicsBackendRegisterInfo& info) {
-    bool channelAlreadyCreated = ChannelManager::getInstance().channelPresent(info._caName);
-    if(!channelAlreadyCreated || info._pv->chid == nullptr) {
-      auto result = ca_create_channel(
-          info._pv->name, ChannelManager::channelStateHandler, this, DEFAULT_CA_PRIORITY, &info._pv->chid);
-      ChannelManager::getInstance().addChannel(info._pv->chid, info._caName);
-      if(result != ECA_NORMAL) {
-        std::cerr << "CA error " << ca_message(result) << " occurred while trying to create channel " << info._pv->name
-                  << std::endl;
-        return;
-      }
+    try {
+      std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+      ChannelManager::getInstance().addChannel(info._caName, this);
     }
+    catch(ChimeraTK::runtime_error& e) {
+      std::cerr << e.what() << ". PV is not added to the catalog." << std::endl;
+      return;
+    }
+    _catalogue_mutable.addRegister(info);
   }
 
   void EpicsBackend::configureChannel(EpicsBackendRegisterInfo& info) {
-    if(ca_state(info._pv->chid) != cs_conn) {
-      std::stringstream ss;
-      ss << "EPICS variable " << info._caName << " mapped to " << info.getRegisterName()
-         << " is diconnected -> entry is not added to the catalogue." << std::endl;
-      throw ChimeraTK::runtime_error(ss.str());
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto pv = ChannelManager::getInstance().getPV(info._caName);
+    if(!ChannelManager::getInstance().isChannelConfigured(info._caName)) {
+      throw ChimeraTK::runtime_error("Trying to read an unconfigured channel.");
     }
+    info._nElements = pv->nElems;
+    info._dbfType = pv->dbfType;
 
-    info._pv->nElems = ca_element_count(info._pv->chid);
-    auto result = ca_pend_io(_caTimeout);
-    if(result == ECA_TIMEOUT) {
-      throw ChimeraTK::runtime_error("EPICS failed setting up time out.");
+    if(ca_read_access(pv->chid) != 1) info._isReadable = false;
+    if(ca_write_access(pv->chid) != 1) info._isWritable = false;
+    if(pv->dbfType == DBF_STRING) {
+      info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::string, true, true, 320, 300);
     }
-    info._pv->dbfType = ca_field_type(info._pv->chid);
-    info._pv->dbrType = dbf_type_to_DBR_TIME(info._pv->dbfType);
-
-    if(ca_read_access(info._pv->chid) != 1) info._isReadable = false;
-    if(ca_write_access(info._pv->chid) != 1) info._isWritable = false;
-
-    if(info._pv->dbfType == DBF_DOUBLE || info._pv->dbfType == DBF_FLOAT) {
+    else if(pv->dbfType == DBF_DOUBLE || pv->dbfType == DBF_FLOAT) {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, false, true, 320, 300);
     }
-    else if(info._pv->dbfType == DBF_INT || info._pv->dbfType == DBF_LONG || info._pv->dbfType == DBF_SHORT) {
+    else if(pv->dbfType == DBF_INT || pv->dbfType == DBF_LONG || pv->dbfType == DBF_SHORT) {
       info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::numeric, true, true, 320, 300);
     }
+    else if(pv->dbfType == DBF_ENUM) {
+      info._dataDescriptor = DataDescriptor(DataDescriptor::FundamentalType::boolean, true, true, 320, 300);
+    }
     else {
-      std::stringstream ss;
-      ss << "Failed to determine data type for EPICS variable " << info._caName << " mapped to "
-         << info.getRegisterName() << " -> entry is not added to the catalogue." << std::endl;
-      throw ChimeraTK::runtime_error(ss.str());
+      std::cerr << "Failed to data descriptor for node: " << info._caName << "." << std::endl;
     }
     info._accessModes.add(AccessMode::wait_for_new_data);
   }
@@ -259,25 +294,38 @@ namespace ChimeraTK {
       mapfile.close();
     }
     else {
-      ChimeraTK::runtime_error(std::string("Failed reading mapfile: ") + mapfileName);
+      throw ChimeraTK::runtime_error(std::string("Failed reading mapfile: ") + mapfileName);
+    }
+
+    if(_catalogue_mutable.getNumberOfRegisters() == 0) {
+      throw ChimeraTK::runtime_error("No registers found in catalogue!");
     }
 
     auto result = ca_flush_io();
     if(result == ECA_TIMEOUT) {
-      ChimeraTK::runtime_error("Channel setup failed.");
-      return;
+      throw ChimeraTK::runtime_error("Channel setup failed.");
     }
-
-    ChannelManager::getInstance().waitForConnections(_caTimeout);
+    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
+    for(size_t i = 0; i < n; i++) {
+      {
+        std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+        if(ChannelManager::getInstance().checkAllConnections(true)) {
+          _channelAccessUp = true;
+          break;
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if(!_channelAccessUp) {
+      throw ChimeraTK::runtime_error("Failed to establish channel access connection.");
+    }
+    for(auto& reg : _catalogue_mutable) {
+      configureChannel(reg);
+    }
   }
 
-  void EpicsBackend::setException() {
-    //\ToDo: Why I have to check is functional here? If not setException is called constantly and which means
-    //_isFunctional will stay false even if reset in the state handler.
-    if(_isFunctional) {
-      _isFunctional = false;
-      _asyncReadActivated = false;
-      ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
-    }
+  void EpicsBackend::setExceptionImpl() noexcept {
+    _asyncReadActivated = false;
+    ChannelManager::getInstance().setException(std::string("Exception reported by another accessor."));
   }
 } // namespace ChimeraTK

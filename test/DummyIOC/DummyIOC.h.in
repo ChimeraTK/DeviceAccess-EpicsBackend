@@ -1,0 +1,88 @@
+// SPDX-FileCopyrightText: Helmholtz-Zentrum Dresden-Rossendorf, FWKE, ChimeraTK Project <chimeratk-support@desy.de>
+// SPDX-License-Identifier: LGPL-3.0-or-later
+#pragma once
+
+/*
+ * TestIOC.h
+ *
+ *  Created on: Oct 17, 2023
+ *      Author: Klaus Zenker (HZDR)
+ */
+#include "EPICSChannelManager.h"
+
+#include <boost/process.hpp>
+
+#include <iostream>
+#include <sstream>
+#include <thread>
+namespace bp = ::boost::process;
+
+enum IOCState { On, Off };
+
+struct IOCHelper {
+  IOCHelper() {}
+  ~IOCHelper() { _child.terminate(); }
+
+  bp::child _child{};
+  bp::opstream p;
+  void start() {
+    bp::ipstream is;
+    p = bp::opstream();
+    _child = bp::child("@CMAKE_CURRENT_BINARY_DIR@/IOC/bin/@EPICS_ARCH@/ctkTest", "st.cmd",
+        bp::start_dir("@CMAKE_CURRENT_BINARY_DIR@/IOC/iocBoot/iocctkTest"), bp::std_in<p, bp::std_out> is);
+  };
+
+  void stop() { _child.terminate(); }
+
+  void pause(const bool& doPause) {
+    if(doPause) {
+      p << "iocPause" << std::endl;
+    }
+    else {
+      p << "iocRun" << std::endl;
+    }
+  }
+
+  void setValue(std::string pvName, const std::vector<std::string>& t, const size_t& length = 1) {
+    //    auto ret = bp::system("@EPICS_PATH@/bin/@EPICS_ARCH@/caput", pvName.c_str(), t.at(0));
+    //    std::cout << "Return code is: " << ret << std::endl;
+    //    if(ret) {
+    //      throw std::runtime_error("Failed to set IOC PV value.");
+    //    }
+    if(length == 1) {
+      p << "dbpf(\"" << pvName.c_str() << "\",\"" << t.at(0) << "\")" << std::endl;
+    }
+    else {
+      p << "dbpf(\"" << pvName.c_str() << "\",\"[" << t.at(0) << ",";
+      if(length > 2) {
+        for(size_t i = 0; i < length - 2; i++) {
+          p << t.at(1 + i) << ",";
+        }
+      }
+      p << t.at(length - 1) << "]\")" << std::endl;
+    }
+  }
+
+  std::string getValue(const std::string& pvName) {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::string cmd("@EPICS_PATH@/bin/@EPICS_ARCH@/caget -t ");
+    cmd += pvName;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    if(!pipe) {
+      throw std::runtime_error("popen() failed!");
+    }
+    while(fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+      result += buffer.data();
+    }
+    result.erase(std::remove(result.begin(), result.end(), '\n'), result.cend());
+    std::cout << "Read current value: " << result.c_str() << std::endl;
+    return result;
+  }
+
+  void checkState(long targetState) {
+    while(ChimeraTK::ChannelManager::getInstance().currentState != targetState) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+  }
+};

@@ -9,10 +9,9 @@
  */
 
 #include "EPICS-Backend.h"
-#include "EPICS_types.h"
 #include "EPICSChannelManager.h"
+#include "EPICSTypes.h"
 #include "EPICSVersionMapper.h"
-#include "string.h"
 
 #include <ChimeraTK/AccessMode.h>
 #include <ChimeraTK/NDRegisterAccessor.h>
@@ -21,7 +20,8 @@
 #include <boost/enable_shared_from_this.hpp>
 
 #include <cadef.h>
-
+#include <cstring> // memcpy
+#include <string>
 namespace ChimeraTK {
 
   template<typename DestType, typename SourceType>
@@ -91,25 +91,66 @@ namespace ChimeraTK {
     Void convert(std::string&) { return Void(); }
   };
 
+  template<>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, Void> {
+   public:
+    std::string convert(Void& /*x*/) { return std::string("void"); }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<Void, dbr_string_t> {
+   public:
+    Void convert(dbr_string_t&) { return Void(); }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<std::string, dbr_string_t> {
+   public:
+    std::string convert(dbr_string_t& x) { return std::string(x); }
+  };
+
+  template<typename DestType>
+  class EpicsRangeCheckingDataConverter<DestType, dbr_string_t> {
+   public:
+    DestType convert(char*) { throw std::logic_error("Conversion from string is not allowed."); }
+  };
+
+  template<typename SourceType>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, SourceType> {
+   public:
+    std::string convert(SourceType& x) { return std::to_string(x); }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, std::string> {
+   public:
+    std::string convert(std::string& x) { return x; }
+  };
+
+  template<>
+  class EpicsRangeCheckingDataConverter<dbr_string_t, ChimeraTK::Boolean> {
+   public:
+    std::string convert(ChimeraTK::Boolean& x) { return (x == true ? std::string("true") : std::string("false")); }
+  };
+
   class EpicsBackendRegisterAccessorBase {
    public:
     EpicsBackendRegisterAccessorBase(boost::shared_ptr<EpicsBackend> backend, const EpicsBackendRegisterInfo& info,
         size_t numberOfWords, size_t wordOffsetInRegister)
     : _info(info), _backend(backend), _numberOfWords(numberOfWords), _offsetWords(wordOffsetInRegister) {}
     EpicsBackendRegisterInfo _info;
-    cppext::future_queue<evargs> _notifications;
+    cppext::future_queue<EpicsRawData> _notifications;
     boost::shared_ptr<EpicsBackend> _backend;
     size_t _numberOfWords; ///< Requested array length. Could be smaller than what is available on the server.
     size_t _offsetWords;   ///< Requested offset for arrays.
     bool _isPartial{false};
     ChimeraTK::VersionNumber _currentVersion;
-    evid* _subscriptionId{nullptr}; ///< Id used for subscriptions
-
-    static void handleEvent(evargs args) {
-      auto base = reinterpret_cast<EpicsBackendRegisterAccessorBase*>(args.usr);
-      //      std::cout << "Handling update of ca " << base->_info._caName << std::endl;
-      if(base->_backend->_asyncReadActivated) base->_notifications.push_overwrite(args);
-    }
+    bool _hasNotificationsQueue{false};
+    /**
+     * Push value to the notification queue. Used if subscription already exists and an additional accessor is added to
+     * the ChannelManager.
+     */
+    virtual void setInitialValue(void* value, long type, long count) = 0;
   };
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
@@ -130,6 +171,12 @@ namespace ChimeraTK {
     bool doWriteTransfer(VersionNumber /*versionNumber*/ = {}) override;
 
     void doPostRead(TransferType, bool hasNewData) override;
+
+    /**
+     * Push value to the notification queue. Used if subscription already exists and an additional accessor is added to
+     * the ChannelManager.
+     */
+    void setInitialValue(void* value, long type, long count) override;
 
     bool isReadOnly() const override { return (_info._isReadable && !_info._isWritable); }
 
@@ -156,71 +203,104 @@ namespace ChimeraTK {
 
     EpicsBackendRegisterAccessor(const RegisterPath& path, boost::shared_ptr<DeviceBackend> backend,
         const EpicsBackendRegisterInfo& registerInfo, AccessModeFlags flags, size_t numberOfWords,
-        size_t wordOffsetInRegister);
+        size_t wordOffsetInRegister, bool asyncReadActivated);
   };
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::EpicsBackendRegisterAccessor(
       const RegisterPath& path, boost::shared_ptr<DeviceBackend> backend, const EpicsBackendRegisterInfo& registerInfo,
-      AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister)
+      AccessModeFlags flags, size_t numberOfWords, size_t wordOffsetInRegister, bool asyncReadActivated)
   : EpicsBackendRegisterAccessorBase(
         boost::dynamic_pointer_cast<EpicsBackend>(backend), registerInfo, numberOfWords, wordOffsetInRegister),
     NDRegisterAccessor<CTKType>(path, flags) {
+    if constexpr(std::is_array_v<EpicsBaseType>) {
+      if(numberOfWords > 1) {
+        throw ChimeraTK::logic_error("No support for lso array.");
+      }
+    }
     if(flags.has(AccessMode::raw)) throw ChimeraTK::logic_error("Raw access mode is not supported.");
     NDRegisterAccessor<CTKType>::buffer_2D.resize(1);
     this->accessChannel(0).resize(numberOfWords);
-    // allocate value
-    _info._pv->value = calloc(1, dbr_size_n(_info._pv->dbrType, _info._pv->nElems));
-    /* \ToDo: Use callback to get informed once the connection state changes.
-              Pass backend pointer and not pv as usr data and in the handler
-              use backend functions to handle connection change.
-    */
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto pv = ChannelManager::getInstance().getPV(_info._caName);
     if(flags.has(AccessMode::wait_for_new_data)) {
-      _notifications = cppext::future_queue<evargs>(3);
+      _hasNotificationsQueue = true;
+      _notifications = cppext::future_queue<EpicsRawData>(3);
       _readQueue = _notifications.then<void>(
-          [this](evargs& args) { memcpy(_info._pv->value, args.dbr, dbr_size_n(args.type, args.count)); });
-      _subscriptionId = new evid();
-      ca_create_subscription(_info._pv->dbrType, _info._pv->nElems, _info._pv->chid, DBE_VALUE,
-          &EpicsBackendRegisterAccessorBase::handleEvent, static_cast<EpicsBackendRegisterAccessorBase*>(this),
-          _subscriptionId);
-      { ChannelManager::getInstance().addAccessor(_info._pv->chid, this); }
-      ca_flush_io();
+          [pv](EpicsRawData& data) { memcpy(pv->value, data.data, data.size); }, std::launch::deferred);
     }
-    if(_info._pv->nElems != numberOfWords) _isPartial = true;
+    if(pv->nElems != numberOfWords) _isPartial = true;
+    ChannelManager::getInstance().addAccessor(_info._caName, this);
+    if(flags.has(AccessMode::wait_for_new_data) && asyncReadActivated) {
+      ChannelManager::getInstance().activateChannel(_info._caName);
+    }
     NDRegisterAccessor<CTKType>::_exceptionBackend = backend;
   }
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
+  void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::setInitialValue(
+      void* value, long type, long count) {
+    auto data = EpicsRawData(value, type, count);
+    _notifications.push_overwrite(std::move(data));
+  }
+
+  template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously() {
-    if(!_backend->isFunctional()) {
-      throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
-    }
-    if(ca_state(_info._pv->chid) == cs_conn) {
-      auto result = ca_array_get(_info._pv->dbrType, _info._pv->nElems, _info._pv->chid, _info._pv->value);
-      if(result != ECA_NORMAL) {
-        throw ChimeraTK::runtime_error(std::string("Failed to to read pv: ") + _info._pv->name);
+    _backend->checkActiveException();
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto pv = ChannelManager::getInstance().getPV(_info._caName);
+    // one could also use ChannelManager::isChannelConnected -> however we ask explicitly ChannelAccess here
+    if(ca_state(pv->chid) == cs_conn) {
+      if(pv->nElems == 1) {
+        auto result = ca_get(pv->dbrType, pv->chid, pv->value);
+        if(result != ECA_NORMAL) {
+          throw ChimeraTK::runtime_error(std::string("Failed to read pv: ") + pv->name);
+        }
+        result = ca_pend_io(default_ca_timeout);
+        if(result == ECA_TIMEOUT) {
+          throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + pv->name);
+        }
       }
-      result = ca_pend_io(_backend->_caTimeout);
-      if(result == ECA_TIMEOUT) {
-        throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + _info._pv->name);
+      else {
+        auto result = ca_array_get(pv->dbrType, pv->nElems, pv->chid, pv->value);
+        if(result != ECA_NORMAL) {
+          throw ChimeraTK::runtime_error(std::string("Failed to read pv: ") + pv->name);
+        }
+        result = ca_pend_io(default_ca_timeout);
+        if(result == ECA_TIMEOUT) {
+          throw ChimeraTK::runtime_error(std::string("Read operation timed out for pv: ") + pv->name);
+        }
       }
     }
     else {
-      std::cerr << "Disconnected when filling catalogue entry for " << _info._name << "(" << _info._pv->name << ")"
-                << std::endl;
-      return;
+      throw ChimeraTK::runtime_error(
+          std::string("ChannelAccess not connected in doReadTransferSynchronously when writing: ") + _info._name + "(" +
+          pv->name + ")");
     }
   }
+
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   void EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doPostRead(TransferType, bool hasNewData) {
     if(!hasNewData) return;
-    EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(_info._pv->value, _info._pv->dbrType);
-    for(size_t i = 0; i < _numberOfWords; i++) {
-      EpicsBaseType value = tmp[_offsetWords + i];
-      // Fill the NDRegisterAccessor buffer
-      this->accessData(i) = toCTK.convert(value);
+    std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
+    auto pv = ChannelManager::getInstance().getPV(_info._caName);
+    EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
+
+    if constexpr(std::is_array_v<EpicsBaseType>) {
+      // only single element as checked in the constructor
+      dbr_string_t tmpStr;
+      strcpy(tmpStr, (char*)tmp);
+      this->accessData(0) = toCTK.convert(tmpStr);
     }
-    EpicsType* tp = (EpicsType*)_info._pv->value;
+    else {
+      for(size_t i = 0; i < _numberOfWords; i++) {
+        EpicsBaseType value = tmp[_offsetWords + i];
+        // Fill the NDRegisterAccessor buffer
+        this->accessData(i) = toCTK.convert(value);
+      }
+    }
+
+    EpicsType* tp = (EpicsType*)pv->value;
     _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
     TransferElement::_versionNumber = _currentVersion;
   }
@@ -228,33 +308,44 @@ namespace ChimeraTK {
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   bool EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doWriteTransfer(
       VersionNumber /*versionNumber*/) {
-    if(!_backend->isFunctional()) {
-      throw ChimeraTK::runtime_error(std::string("Exception reported by another accessor."));
-    }
-    if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
+    _backend->checkActiveException();
+    auto pv = ChannelManager::getInstance().getPV(_info._caName);
+    // one could also use ChannelManager::isChannelConnected -> however we ask explicitly ChannelAccess here
+    if(ca_state(pv->chid) == cs_conn) {
+      if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
+      EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
+      long result;
+      if constexpr(std::is_array_v<EpicsBaseType>) {
+        // only single element as checked in the constructor
+        result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, toEpics.convert(this->accessData(0)).c_str());
+      }
+      else {
+        for(size_t i = 0; i < _numberOfWords; i++) {
+          tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
+        }
+        result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, tmp);
+      }
 
-    EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(_info._pv->value, _info._pv->dbrType);
-    for(size_t i = 0; i < _numberOfWords; i++) {
-      tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
+      if(result != ECA_NORMAL) {
+        std::cerr << "Failed to to write pv: " << _info._caName << std::endl;
+        return false;
+      }
+      result = ca_pend_io(default_ca_timeout);
+      if(result == ECA_TIMEOUT) {
+        std::cerr << "Timeout while writing pv: " << _info._caName << std::endl;
+        return false;
+      }
     }
-    auto result = ca_array_put(_info._pv->dbfType, _info._pv->nElems, _info._pv->chid, tmp);
-    if(result != ECA_NORMAL) {
-      std::cerr << "Failed to to write pv: " << _info._caName << std::endl;
-      return false;
-    }
-    result = ca_pend_io(_backend->_caTimeout);
-    if(result == ECA_TIMEOUT) {
-      std::cerr << "Timeout while writing pv: " << _info._caName << std::endl;
-      return false;
+    else {
+      throw ChimeraTK::runtime_error(std::string("ChannelAccess not connected in doWriteTransfer when writing: ") +
+          _info._name + "(" + pv->name + ")");
     }
     return true;
   }
 
   template<typename EpicsBaseType, typename EpicsType, typename CTKType>
   EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::~EpicsBackendRegisterAccessor() {
-    if(_subscriptionId) {
-      ChannelManager::getInstance().removeAccessor(_info._pv->chid, this);
-    }
+    ChannelManager::getInstance().removeAccessor(_info._caName, this);
   }
 
 } // namespace ChimeraTK

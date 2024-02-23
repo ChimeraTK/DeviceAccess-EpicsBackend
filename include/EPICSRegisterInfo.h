@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 #pragma once
 
-#include <ChimeraTK/BackendRegisterCatalogue.h>
 /*
  * EPICSRegisterInfo.h
  *
- *  Created on: Oct 16, 2023
+ *  Created on: Oct 19, 2023
  *      Author: Klaus Zenker (HZDR)
  */
 
+#include <ChimeraTK/BackendRegisterCatalogue.h>
+
 namespace ChimeraTK {
+
   struct EpicsBackendRegisterInfo : public BackendRegisterInfoBase {
     EpicsBackendRegisterInfo(const RegisterPath& path) : _name(path){};
     EpicsBackendRegisterInfo() = default;
@@ -19,7 +21,7 @@ namespace ChimeraTK {
 
     std::string getRegisterPath() const { return _name; }
 
-    unsigned int getNumberOfElements() const override { return _pv->nElems; }
+    unsigned int getNumberOfElements() const override { return _nElements; }
 
     unsigned int getNumberOfChannels() const override { return 1; }
 
@@ -39,9 +41,9 @@ namespace ChimeraTK {
     bool _isReadable{true}, _isWritable{true};
     DataDescriptor _dataDescriptor;
     AccessModeFlags _accessModes{};
+    unsigned int _nElements{};
+    long _dbfType{};
 
-    //\ToDo: Use pointer to have name persistent
-    std::shared_ptr<pv> _pv;
     // this is needed because the name inside _pv is just a pointer
     std::string _caName;
   };

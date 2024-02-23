@@ -8,12 +8,13 @@
  *      Author: Klaus Zenker (HZDR)
  */
 
-#include "EPICS_types.h"
 #include "EPICSRegisterInfo.h"
+#include "EPICSTypes.h"
 
 #include <ChimeraTK/BackendRegisterCatalogue.h>
 #include <ChimeraTK/DeviceBackendImpl.h>
 
+#include <atomic>
 #include <cadef.h>
 #include <memory>
 #include <string.h>
@@ -25,10 +26,10 @@ namespace ChimeraTK {
     ~EpicsBackend();
     static boost::shared_ptr<DeviceBackend> createInstance(
         std::string address, std::map<std::string, std::string> parameters);
-    void setBackendState(bool isFunctional) { _isFunctional = isFunctional; }
-    bool _asyncReadActivated{false};
+    void setBackendState(const bool& channelAccessUp) { _channelAccessUp = channelAccessUp; }
+    std::atomic<bool> _asyncReadActivated{false};
+    std::atomic<bool> _channelAccessUp{false};
 
-   protected:
     EpicsBackend(const std::string& mapfile = "");
 
     /**
@@ -36,7 +37,7 @@ namespace ChimeraTK {
      */
     RegisterCatalogue getRegisterCatalogue() const override { return RegisterCatalogue(_catalogue_mutable.clone()); };
 
-    void setException() override;
+    void setExceptionImpl() noexcept override;
 
     void open() override;
 
@@ -47,8 +48,6 @@ namespace ChimeraTK {
       ss << "EPICS Server";
       return ss.str();
     }
-
-    bool isFunctional() const override { return _isFunctional; };
 
     void activateAsyncRead() noexcept override;
 
@@ -81,25 +80,23 @@ namespace ChimeraTK {
      */
     bool _catalogue_filled;
 
-    bool _isFunctional{false};
-
-    double _caTimeout{1.0};
-
-    std::string _mapfile;
+    /**
+     * During creation already channels are set up.
+     * When entering open() the first time this is a special case,
+     * because normally close() was called before and no channels are set up.
+     */
+    bool _freshCreated;
 
     void fillCatalogueFromMapFile(const std::string& mapfile);
 
-    /**
-     * Open the Channel Access channel. Add channel to the CahnnelManager.
-     */
-    void openChannel(const EpicsBackendRegisterInfo& info);
-
     void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);
 
-    /**
-     * \throw ChimeraTK::runtime_error if channel is disconnected
-     */
     void configureChannel(EpicsBackendRegisterInfo& info);
+
+    /**
+     * Prepare channel access context.
+     */
+    void prepareChannelAccess();
   };
 
 } // namespace ChimeraTK

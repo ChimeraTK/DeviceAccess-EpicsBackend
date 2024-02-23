@@ -1,0 +1,61 @@
+record(longout, "ctkTest:longout")
+{
+        field(SCAN, "Passive")
+        field(DESC, "Analog output")
+        field(EGU, "Counts")
+        field(PINI, "1")
+}
+
+record(ao, "ctkTest:ao")
+{
+        field(SCAN, "Passive")
+        field(DESC, "Analog output")
+        field(EGU, "Counts")
+        field(PINI, "1")
+}
+
+record(aao, "ctkTest:aao")
+{
+        field(SCAN, "Passive")
+        field(DESC, "Analog output")
+        field(EGU, "Counts")
+        field(FTVL,"LONG")
+        field(NELM, "10")
+        field(PINI, "1")
+}
+
+record(bo, "ctkTest:boInt")
+{
+        field(SCAN, "Passive")
+        field(ZNAM, "0")
+        field(ONAM, "1")
+        field(PINI, "1")
+}
+
+record(bo, "ctkTest:boIntInverse")
+{
+        field(SCAN, "Passive")
+        field(ZNAM, "1")
+        field(ONAM, "0")
+        field(PINI, "1")
+}
+
+record(bo, "ctkTest:boTrueFalse")
+{
+        field(SCAN, "Passive")
+        field(ZNAM, "False")
+        field(ONAM, "True")
+        field(PINI, "1")
+}
+record(bo, "ctkTest:botruefalse")
+{
+        field(SCAN, "Passive")
+        field(ZNAM, "false")
+        field(ONAM, "true")
+        field(PINI, "1")
+}
+record(lso, "ctkTest:lso")
+{
+        field(SCAN, "Passive")
+        field(PINI, "1")
+}
