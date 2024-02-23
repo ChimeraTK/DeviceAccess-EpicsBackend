@@ -7,6 +7,8 @@ set(${PROJECT_NAME}_MINOR_VERSION 02)
 set(${PROJECT_NAME}_PATCH_VERSION 00)
 include(cmake/set_version_numbers.cmake)
 
+option(BUILD_TESTS "Build tests." OFF)
+
 include(cmake/set_default_flags.cmake)
 include(cmake/set_default_build_to_release.cmake)
 include(cmake/enable_code_style_check.cmake)
@@ -37,8 +39,9 @@ set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_
 target_link_libraries(${PROJECT_NAME} PUBLIC ChimeraTK::ChimeraTK-DeviceAccess
                                       PRIVATE ${EPICS_LIBS}
                                       PRIVATE ${EPICS_LDFLAGS})
-
-add_subdirectory(test)
+if(BUILD_TESTS)
+  add_subdirectory(test)
+endif(BUILD_TESTS)
 
 # Enable documentation
 include(cmake/enable_doxygen_documentation.cmake)
