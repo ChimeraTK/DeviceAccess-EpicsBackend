@@ -111,16 +111,9 @@ namespace ChimeraTK {
     ChannelManager::getInstance().deactivateChannels();
     ChannelManager::getInstance().resetConnectionState();
     ca_context_destroy();
-    // wait until connection is closed
-    size_t n = default_ca_timeout / 0.1; // sleep 100ms per loop, wait default_ca_timeout until giving up
-    for(size_t i = 0; i < n; i++) {
-      if(isFunctional()) break;
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
   }
 
   void EpicsBackend::activateAsyncRead() noexcept {
-    //    if(_asyncReadActivated || !_opened || !_isFunctional) return;
     if(!isFunctional()) return;
     // activate async read expects an initial value so deactivate channels first to force initial value
     {
