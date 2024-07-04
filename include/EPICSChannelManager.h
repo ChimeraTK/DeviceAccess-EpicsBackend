@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 namespace ChimeraTK {
   class EpicsBackendRegisterAccessorBase;
