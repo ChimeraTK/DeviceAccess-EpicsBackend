@@ -66,7 +66,7 @@ struct IOCHelper {
   std::string getValue(const std::string& pvName) {
     std::array<char, 128> buffer;
     std::string result;
-    std::string cmd("@EPICS_PATH@/bin/@EPICS_ARCH@/caget -t ");
+    std::string cmd("@EPICS_BASE@/bin/@EPICS_ARCH@/caget -t ");
     cmd += pvName;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
     if(!pipe) {
