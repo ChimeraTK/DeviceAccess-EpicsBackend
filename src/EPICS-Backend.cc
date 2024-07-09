@@ -100,6 +100,7 @@ namespace ChimeraTK {
         std::lock_guard<std::mutex> lock(ChannelManager::getInstance().mapLock);
         ChannelManager::getInstance().activateChannels();
       }
+      _startVersion = {};
       setOpenedAndClearException();
     }
   }

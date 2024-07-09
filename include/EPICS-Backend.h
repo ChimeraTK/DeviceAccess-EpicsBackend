@@ -87,6 +87,8 @@ namespace ChimeraTK {
      */
     bool _freshCreated;
 
+    ChimeraTK::VersionNumber _startVersion{nullptr};
+
     void fillCatalogueFromMapFile(const std::string& mapfile);
 
     void addCatalogueEntry(RegisterPath path, std::shared_ptr<std::string> pvName);

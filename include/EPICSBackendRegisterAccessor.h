@@ -302,6 +302,9 @@ namespace ChimeraTK {
 
     EpicsType* tp = (EpicsType*)pv->value;
     _currentVersion = EPICS::VersionMapper::getInstance().getVersion(tp[0].stamp);
+    if(_currentVersion < _backend->_startVersion) {
+      _currentVersion = _backend->_startVersion;
+    }
     TransferElement::_versionNumber = _currentVersion;
   }
 
