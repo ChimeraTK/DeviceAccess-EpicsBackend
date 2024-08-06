@@ -28,11 +28,17 @@ set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRU
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_FULL_LIBRARY_VERSION} SOVERSION ${${PROJECT_NAME}_SOVERSION})
 target_link_libraries(${PROJECT_NAME} PUBLIC ChimeraTK::ChimeraTK-DeviceAccess PRIVATE ChimeraTK::EPICS)
 
-option(BUILD_TESTS "Build tests." ON)
+FIND_PACKAGE(Boost 1.83 COMPONENTS unit_test_framework)
 
-if(BUILD_TESTS)
-  add_subdirectory(test)
-endif(BUILD_TESTS)
+if(Boost_FOUND)
+  option(BUILD_TESTS "Build tests." ON)
+
+  if(BUILD_TESTS)
+    add_subdirectory(test)
+  endif(BUILD_TESTS)
+else()
+  message(WARNING "Tests will not be built since no suitable version of BOOST unit_test_framework has been found!")
+endif()
 
 # Enable documentation
 include(cmake/enable_doxygen_documentation.cmake)

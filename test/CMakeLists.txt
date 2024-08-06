@@ -1,7 +1,5 @@
 find_program(PERL perl REQUIRED)
 
-FIND_PACKAGE(Boost 1.83 COMPONENTS unit_test_framework REQUIRED)
-
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/IOC
   COMMAND mkdir ${CMAKE_CURRENT_BINARY_DIR}/IOC)
 
