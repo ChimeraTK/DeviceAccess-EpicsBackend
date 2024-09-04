@@ -316,13 +316,13 @@ namespace ChimeraTK {
     // one could also use ChannelManager::isChannelConnected -> however we ask explicitly ChannelAccess here
     if(ca_state(pv->chid) == cs_conn) {
       if(_isPartial) EpicsBackendRegisterAccessor<EpicsBaseType, EpicsType, CTKType>::doReadTransferSynchronously();
-      EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
       long result;
       if constexpr(std::is_array_v<EpicsBaseType>) {
         // only single element as checked in the constructor
         result = ca_array_put(pv->dbfType, pv->nElems, pv->chid, toEpics.convert(this->accessData(0)).c_str());
       }
       else {
+        EpicsBaseType* tmp = (EpicsBaseType*)dbr_value_ptr(pv->value, pv->dbrType);
         for(size_t i = 0; i < _numberOfWords; i++) {
           tmp[_offsetWords + i] = toEpics.convert(this->accessData(i));
         }
