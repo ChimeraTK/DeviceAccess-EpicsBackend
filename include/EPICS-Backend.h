@@ -13,6 +13,7 @@
 
 #include <ChimeraTK/BackendRegisterCatalogue.h>
 #include <ChimeraTK/DeviceBackendImpl.h>
+#include <ChimeraTK/VersionNumber.h>
 
 #include <atomic>
 #include <cadef.h>
@@ -87,7 +88,7 @@ namespace ChimeraTK {
      */
     bool _freshCreated;
 
-    ChimeraTK::VersionNumber _startVersion{nullptr};
+    VersionNumber _startVersion{nullptr};
 
     void fillCatalogueFromMapFile(const std::string& mapfile);
 
