@@ -1,0 +1,15 @@
+{
+    "creators": [
+        {
+            "name": "Zenker, Klaus",
+            "affiliation": "Helmholtz-Zentrum Dresden-Rossendorf",
+            "orcid": "0000-0002-8120-6806"
+        }
+    ],
+    "title": "EPICS device backend for the ChimeraTK framework",
+    "access_right": "open",
+    "upload_type": "software",
+    "license": "LGPL-3.0",
+    "pub_id": "40202",
+    "description": "The EPICS device backend implements a EPICS client, that allows to create an ChimeraTK device that communicates with an EPICS IOC via the EPICS Channel Access (CA) protocol."
+}
