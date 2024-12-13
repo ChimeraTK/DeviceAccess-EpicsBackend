@@ -14,7 +14,7 @@ authors:
     affiliation: Helmholtz-Zentrum Dresden-Rossendorf
 identifiers:
   - type: doi
-    value: 10.14278/rodare.3257
+    value: 10.14278/rodare.3333
 repository-code: 'https://github.com/ChimeraTK/DeviceAccess-EpicsBackend'
 url: >-
   https://chimeratk.github.io/ChimeraTK-DeviceAccess-EPICS-Backend/head/html/index.html
@@ -29,6 +29,6 @@ keywords:
   - Control System
 license: LGPL-3.0
 commit: >-
-  https://github.com/ChimeraTK/DeviceAccess-EpicsBackend/commit/69292a7cef5fcc639f7f23d257c6e0d18397cdb9
-version: 01.00.00
+  https://github.com/ChimeraTK/DeviceAccess-EpicsBackend/commit/58bbccd21102a6ea078821d983c86f097780b037
+version: 01.00.01
 date-released: '2024-08-07'
