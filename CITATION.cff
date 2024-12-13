@@ -1,0 +1,34 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: EPICS device backend for the ChimeraTK framework
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Klaus
+    family-names: Zenker
+    orcid: 'https://orcid.org/0000-0002-8120-6806'
+    affiliation: Helmholtz-Zentrum Dresden-Rossendorf
+identifiers:
+  - type: doi
+    value: 10.14278/rodare.3333
+repository-code: 'https://github.com/ChimeraTK/DeviceAccess-EpicsBackend'
+url: >-
+  https://chimeratk.github.io/ChimeraTK-DeviceAccess-EPICS-Backend/head/html/index.html
+abstract: >-
+  The EPICS device backend implements a EPICS client, that
+  allows to create an ChimeraTK device that communicates
+  with an EPICS IOC via the EPICS Channel Access (CA)
+  protocol.
+keywords:
+  - EPICS
+  - ChimeraTK
+  - Control System
+license: LGPL-3.0
+commit: >-
+  https://github.com/ChimeraTK/DeviceAccess-EpicsBackend/commit/58bbccd21102a6ea078821d983c86f097780b037
+version: 01.00.01
+date-released: '2024-08-07'
