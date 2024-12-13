@@ -1,5 +1,11 @@
 # DeviceAccess-EPICS-Backend
 
+[![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0.html)
+[![DOI](https://rodare.hzdr.de/badge/DOI/10.14278/rodare.3333.svg)](https://doi.org/10.14278/rodare.3333)
+![Supported Platforms][api-platforms]
+
+[api-platforms]: https://img.shields.io/badge/platforms-linux%20-blue.svg "Supported Platforms"
+
 This backend allows to access EPICS process variables via EPICS channel access.
 It was tested with EPICS R7.0.5.
 
