@@ -15,10 +15,11 @@
 #include <ChimeraTK/DeviceBackendImpl.h>
 #include <ChimeraTK/VersionNumber.h>
 
-#include <atomic>
 #include <cadef.h>
-#include <memory>
 #include <string.h>
+
+#include <atomic>
+#include <memory>
 
 namespace ChimeraTK {
 
