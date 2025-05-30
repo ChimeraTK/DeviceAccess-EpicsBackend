@@ -14,7 +14,7 @@
 namespace ChimeraTK {
 
   struct EpicsBackendRegisterInfo : public BackendRegisterInfoBase {
-    EpicsBackendRegisterInfo(const RegisterPath& path) : _name(path){};
+    EpicsBackendRegisterInfo(const RegisterPath& path) : _name(path) {};
     EpicsBackendRegisterInfo() = default;
 
     RegisterPath getRegisterName() const override { return _name; }

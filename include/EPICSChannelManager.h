@@ -36,8 +36,8 @@ namespace ChimeraTK {
       data = ::operator new(size);
       memcpy(data, args.dbr, size);
     }
-    EpicsRawData() : data(nullptr), size(0){};
-    EpicsRawData(EpicsRawData&& other) : data(std::exchange(other.data, nullptr)), size(other.size){};
+    EpicsRawData() : data(nullptr), size(0) {};
+    EpicsRawData(EpicsRawData&& other) : data(std::exchange(other.data, nullptr)), size(other.size) {};
     EpicsRawData(const void* dataPtr, long type, long count) {
       size = dbr_size_n(type, count);
       data = ::operator new(size);
